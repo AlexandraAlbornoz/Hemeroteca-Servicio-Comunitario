@@ -16,6 +16,9 @@ from hemeroteca import main as entry
 class PruebasDescubrimiento(unittest.TestCase):
     """Usa paquetes sintéticos y dobles de socket, sin broadcast en la LAN."""
 
+    def setUp(self):
+        self.enterContext(patch.object(module, '_discovery_interfaces', return_value=('192.168.1.1',)))
+
     def test_ips_y_direccion_local_sin_red_real(self):
         """Distingue rutas privadas válidas de bucle local, públicas e indisponibles."""
         for address, expected in (('192.168.1.2', True), ('127.0.0.1', True), ('0.0.0.0', False),
@@ -61,7 +64,10 @@ class PruebasDescubrimiento(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]['name'], 'PCFicticia')
         self.assertEqual(result[0]['url'], 'https://192.168.1.2:8767')
-        self.assertEqual(udp.sendto.call_count, 2)
+        udp.bind.assert_called_once_with(('192.168.1.1', 0))
+        udp.setsockopt.assert_any_call(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
+        udp.sendto.assert_called_once()
+        self.assertEqual(udp.sendto.call_args.args[1], (module.DISCOVERY_GROUP, module.DISCOVERY_PORT))
 
     def test_reinicios_udp_se_toleran_y_otros_errores_se_propagan(self):
         """Un puerto sin receptor no se confunde con un fallo general de red."""
@@ -93,6 +99,22 @@ class PruebasDescubrimiento(unittest.TestCase):
             result = module.discover_waiting(timeout=100)
         self.assertEqual(len(result), 32)
         self.assertEqual(result[0]['name'], 'PC de consulta')
+
+    def test_receptor_acota_la_escucha_a_la_interfaz_o_al_grupo(self):
+        """Comprueba los enlaces y la membresía en Windows y Linux."""
+        interface = '192.168.1.1'
+        group = socket.inet_aton(module.DISCOVERY_GROUP) + socket.inet_aton(interface)
+        for platform, address in (('win32', interface), ('linux', module.DISCOVERY_GROUP)):
+            with self.subTest(platform=platform):
+                lan, local = Mock(), Mock()
+                with (patch.object(module.sys, 'platform', platform),
+                      patch.object(module, '_discovery_interfaces', return_value=(interface, module.LOOPBACK)),
+                      patch.object(module, '_discovery_socket', side_effect=[lan, local])):
+                    responder = module.DiscoveryResponder(lambda: None)
+                self.addCleanup(responder.close)
+                lan.bind.assert_called_once_with((address, module.DISCOVERY_PORT))
+                lan.setsockopt.assert_any_call(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, group)
+                local.bind.assert_called_once_with((module.LOOPBACK, module.DISCOVERY_PORT))
 
     def test_responder_descarta_entradas_y_limita_frecuencia(self):
         """El receptor responde solo a consultas válidas y evita amplificar ráfagas."""

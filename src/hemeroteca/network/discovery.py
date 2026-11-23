@@ -8,8 +8,13 @@ import socket
 import sys
 import threading
 import time
+from contextlib import ExitStack
+from select import select
 
 DISCOVERY_PORT = 8766
+# Grupo IPv4 de alcance local administrativo. Las consultas salen con TTL 1.
+DISCOVERY_GROUP = '239.255.77.76'
+LOOPBACK = '127.0.0.1'
 PROTOCOL = 'hemeroteca-pair-v1'
 
 
@@ -90,42 +95,89 @@ def local_direccion(peer='224.0.0.251'):
 local_address = local_direccion
 
 
+def _discovery_interfaces():
+    """Enumera las IPv4 privadas del equipo, con respaldo para hosts sin DNS local."""
+    addresses = []
+    try:
+        records = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET, socket.SOCK_DGRAM)
+        addresses.extend(record[4][0] for record in records)
+    except OSError:
+        pass
+    try:
+        addresses.append(local_address(DISCOVERY_GROUP))
+    except ValueError:
+        pass
+    private = dict.fromkeys(address for address in addresses
+                            if private_ip(address) and not address.startswith('127.'))
+    return (*private, LOOPBACK)
+
+
+def _configure_query(udp, interface):
+    """Recibe respuestas únicamente en la dirección que originó la búsqueda."""
+    udp.bind((interface, 0))
+    if interface != LOOPBACK:
+        udp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(interface))
+        udp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
+    udp.settimeout(.3)
+
+
+def _ready(sockets, timeout):
+    """Evita que una interfaz sin tráfico retrase la lectura de las demás."""
+    if len(sockets) == 1:
+        return sockets
+    return select(sockets, [], [], timeout)[0]
+
+
 def descubrir_esperando(timeout=3):
-    """Busca invitaciones por UDP durante el plazo indicado y devuelve hasta 32 equipos válidos sin duplicados."""
-    tiempo_espera = timeout
+    """Busca invitaciones en las interfaces privadas y devuelve hasta 32 equipos."""
     nonce, found = secrets.token_hex(16), {}
     consulta = json.dumps({'protocol': PROTOCOL, 'kind': 'discover', 'nonce': nonce}).encode()
-    with _discovery_socket() as udp:
-        udp.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        udp.bind(('', 0))
-        udp.settimeout(.3)
-        for direccion in ('255.255.255.255', '127.0.0.1'):
-            try:
-                udp.sendto(consulta, (direccion, DISCOVERY_PORT))
-            except OSError as excepcion:
-                if not _is_udp_reset(excepcion):
-                    raise
-        plazo = time.monotonic() + tiempo_espera
+    with ExitStack() as resources:
+        sockets = []
+        setup_error = None
+        for interface in _discovery_interfaces():
+            with ExitStack() as candidate:
+                udp = candidate.enter_context(_discovery_socket())
+                try:
+                    _configure_query(udp, interface)
+                except OSError as error:
+                    setup_error = error
+                    continue
+                destination = LOOPBACK if interface == LOOPBACK else DISCOVERY_GROUP
+                try:
+                    udp.sendto(consulta, (destination, DISCOVERY_PORT))
+                except OSError as error:
+                    if not _is_udp_reset(error):
+                        setup_error = error
+                        continue
+                resources.enter_context(candidate.pop_all())
+                sockets.append(udp)
+        if not sockets:
+            raise OSError('No se pudo iniciar el descubrimiento en ninguna interfaz local.') from setup_error
+        plazo = time.monotonic() + timeout
         while time.monotonic() < plazo and len(found) < 32:
-            try:
-                contenido, origen = udp.recvfrom(4096)
-                elemento = json.loads(contenido)
-                if elemento.get('protocol') != PROTOCOL or elemento.get('nonce') != nonce or not private_ip(origen[0]):
+            for udp in _ready(sockets, .3):
+                if len(found) == 32:
+                    break
+                try:
+                    contenido, origen = udp.recvfrom(4096)
+                    elemento = json.loads(contenido)
+                    if elemento.get('protocol') != PROTOCOL or elemento.get('nonce') != nonce or not private_ip(origen[0]):
+                        continue
+                    if not isinstance(elemento.get('invitation_id'), str) or not isinstance(elemento.get('name'), str):
+                        continue
+                    puerto = int(elemento['port'])
+                    if not 1024 <= puerto <= 65535 or int(elemento['expires_at']) < time.time():
+                        continue
+                    elemento['name'] = ''.join(elemento_breve for elemento_breve in elemento['name'][:80] if elemento_breve.isprintable()) or 'PC de consulta'
+                    elemento['url'] = f'https://{origen[0]}:{puerto}'
+                    found[elemento['invitation_id']] = elemento
+                except (socket.timeout, ValueError, KeyError, TypeError, AttributeError, OverflowError):
                     continue
-                if not isinstance(elemento.get('invitation_id'), str) or not isinstance(elemento.get('name'), str):
-                    continue
-                puerto = int(elemento['port'])
-                if not 1024 <= puerto <= 65535 or int(elemento['expires_at']) < time.time():
-                    continue
-                elemento['name'] = ''.join(elemento_breve for elemento_breve in elemento['name'][:80] if elemento_breve.isprintable()) or 'PC de consulta'
-                elemento['url'] = f'https://{origen[0]}:{puerto}'
-                found[elemento['invitation_id']] = elemento
-            except (socket.timeout, ValueError, KeyError, TypeError, AttributeError, OverflowError):
-                continue
-            except OSError as excepcion:
-                # Un destino sin receptor no invalida las respuestas de otros.
-                if not _is_udp_reset(excepcion):
-                    raise
+                except OSError as excepcion:
+                    # Un destino sin receptor no invalida las respuestas de otros.
+                    if not _is_udp_reset(excepcion):
+                        raise
     return list(found.values())
 # Alias del contrato anterior: conserva integraciones y llamadas RPC.
 discover_waiting = descubrir_esperando
@@ -137,16 +189,49 @@ class DiscoveryResponder:
         """Abre el socket de descubrimiento y prepara el hilo y la señal de cierre sin iniciar todavía la recepción."""
         self.description = description
         self.stop = threading.Event()
-        self.socket = _discovery_socket()
+        self.resources = ExitStack()
+        self.sockets = []
         try:
-            if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
-                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-            self.socket.bind(('', DISCOVERY_PORT))
-            self.socket.settimeout(.5)
+            interfaces = _discovery_interfaces()
+            lan = tuple(interface for interface in interfaces if interface != LOOPBACK)
+            if sys.platform == 'win32':
+                listeners = [(interface, (interface,)) for interface in lan]
+            else:
+                listeners = [(DISCOVERY_GROUP, lan)] if lan else []
+            if LOOPBACK in interfaces:
+                listeners.append((LOOPBACK, (LOOPBACK,)))
+            error = None
+            listening_on_lan = False
+            for address, memberships in listeners:
+                try:
+                    self._open_listener(address, memberships)
+                    listening_on_lan |= address != LOOPBACK
+                except OSError as exception:
+                    error = exception
+                    if address != LOOPBACK:
+                        logging.getLogger(__name__).debug('No se pudo escuchar en %s.', address, exc_info=True)
+            if not self.sockets or (lan and not listening_on_lan):
+                raise error
             self.thread = threading.Thread(target=self.run, daemon=True, name='hemeroteca-descubrimiento')
         except (OSError, RuntimeError):
-            self.socket.close()
+            self.resources.close()
             raise
+
+    def _open_listener(self, address, interfaces):
+        """Une el grupo solo en las interfaces aprobadas por el descubrimiento."""
+        with ExitStack() as candidate:
+            udp = _discovery_socket()
+            candidate.callback(udp.close)
+            if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+                udp.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            udp.bind((address, DISCOVERY_PORT))
+            for interface in interfaces:
+                if interface != LOOPBACK:
+                    membership = socket.inet_aton(DISCOVERY_GROUP) + socket.inet_aton(interface)
+                    udp.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership)
+            udp.settimeout(.5)
+            self.resources.enter_context(candidate.pop_all())
+        self.sockets.append(udp)
 
     def iniciar(self):
         'Inicia el trabajador o servidor y conserva su referencia para el cierre.'
@@ -159,36 +244,43 @@ class DiscoveryResponder:
         last = {}
         while not self.stop.is_set():
             try:
-                contenido, origen = self.socket.recvfrom(2048)
-                consulta = json.loads(contenido)
-                if consulta.get('protocol') != PROTOCOL or consulta.get('kind') != 'discover' or not private_ip(origen[0]):
-                    continue
-                nonce = consulta.get('nonce', '')
-                if not isinstance(nonce, str) or len(nonce) != 32:
-                    continue
-                if time.monotonic() - last.get(origen[0], 0) < .5:
-                    continue
-                last[origen[0]] = time.monotonic()
-                if len(last) > 256:
-                    last.clear()
-                description = self.description()
-                if description:
-                    self.socket.sendto(json.dumps(dict(description, protocol=PROTOCOL, nonce=nonce)).encode(), origen)
-            except (socket.timeout, ValueError, AttributeError):
-                continue
-            except OSError as excepcion:
-                if not self.stop.is_set() and _is_udp_reset(excepcion):
-                    continue
+                ready = _ready(self.sockets, .5)
+            except (OSError, ValueError):
                 if not self.stop.is_set():
-                    logging.getLogger(__name__).exception('Se interrumpió la recepción de búsquedas de computadoras.')
-                break
+                    logging.getLogger(__name__).exception('Se interrumpió la espera de búsquedas de computadoras.')
+                return
+            for udp in ready:
+                try:
+                    contenido, origen = udp.recvfrom(2048)
+                    consulta = json.loads(contenido)
+                    if consulta.get('protocol') != PROTOCOL or consulta.get('kind') != 'discover' or not private_ip(origen[0]):
+                        continue
+                    nonce = consulta.get('nonce', '')
+                    if not isinstance(nonce, str) or len(nonce) != 32:
+                        continue
+                    if time.monotonic() - last.get(origen[0], 0) < .5:
+                        continue
+                    last[origen[0]] = time.monotonic()
+                    if len(last) > 256:
+                        last.clear()
+                    description = self.description()
+                    if description:
+                        udp.sendto(json.dumps(dict(description, protocol=PROTOCOL, nonce=nonce)).encode(), origen)
+                except (socket.timeout, ValueError, AttributeError):
+                    continue
+                except OSError as excepcion:
+                    if not self.stop.is_set() and _is_udp_reset(excepcion):
+                        continue
+                    if not self.stop.is_set():
+                        logging.getLogger(__name__).exception('Se interrumpió la recepción de búsquedas de computadoras.')
+                    return
     # Alias del contrato anterior: conserva integraciones y llamadas RPC.
     run = ejecutar
 
     def cerrar(self):
         'Libera los recursos propios y finaliza esta instancia.'
         self.stop.set()
-        self.socket.close()
+        self.resources.close()
         if self.thread.is_alive():
             self.thread.join(timeout=1)
     # Alias del contrato anterior: conserva integraciones y llamadas RPC.

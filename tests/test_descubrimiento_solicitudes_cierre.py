@@ -26,7 +26,9 @@ class PruebasDescubrimientoCerrado(unittest.TestCase):
     def test_sin_opcion_exclusiva_y_cerrado_no_recibe_datagramas(self):
         udp=Mock()
         # Simula únicamente la ausencia de una constante específica de Windows.
-        with patch.object(discovery,'socket',SimpleNamespace(SOL_SOCKET=1)),patch.object(discovery,'_discovery_socket',return_value=udp):
+        with (patch.object(discovery,'socket',SimpleNamespace(SOL_SOCKET=1)),
+              patch.object(discovery,'_discovery_socket',return_value=udp),
+              patch.object(discovery,'_discovery_interfaces',return_value=(discovery.LOOPBACK,))):
             responder=discovery.DiscoveryResponder(lambda:None)
             responder.stop.set();responder.run();responder.close()
         udp.setsockopt.assert_not_called();udp.recvfrom.assert_not_called();udp.close.assert_called_once()

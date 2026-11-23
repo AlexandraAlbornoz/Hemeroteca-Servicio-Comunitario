@@ -12,6 +12,9 @@ from hemeroteca.config.settings import SECURITY_QUESTIONS
 class PruebasDescubrimientoPendiente(unittest.TestCase):
     """Paquetes, reloj y Winsock controlados sin emitir tráfico UDP."""
 
+    def setUp(self):
+        self.enterContext(patch.object(d, '_discovery_interfaces', return_value=('192.168.1.1',)))
+
     def valid(self, **kw):
         return dict(protocol=d.PROTOCOL,nonce='a'*32,invitation_id='invitacion',name='PC',port=8765,expires_at=2000)|kw
 
