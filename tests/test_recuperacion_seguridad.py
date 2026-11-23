@@ -16,7 +16,7 @@ class PruebasRecuperacionSeguridad(unittest.TestCase):
     def setUpClass(cls):
         """Crea cuentas y códigos artificiales para una semilla independiente."""
         cls.semilla = create_services(':memory:')
-        cls.contrasena = 'Inicial!2026'
+        cls.contrasena = 'Inicial!2026'  # pragma: allowlist secret (credencial sintética de la prueba)
         cls.respuestas = ('Luna', 'María', 'Pecas')
         cls.preguntas = tuple(zip(SECURITY_QUESTIONS[:3], cls.respuestas))
         cls.registros = [cls.semilla.auth.create_master('Maestro temporal', 'V-700001', cls.contrasena, cls.preguntas)]

@@ -19,10 +19,10 @@ from hemeroteca.utils.security import normalize_security_answer, password_matche
 from hemeroteca.ui.login_view import LoginView
 
 
-MASTER_PASSWORD = "Maestro!2026"
-USER_PASSWORD = "Usuario!2026"
-ADMIN_PASSWORD = "Admin!2026"
-NEW_PASSWORD = "Nueva!2026"
+MASTER_PASSWORD = "Maestro!2026"  # pragma: allowlist secret (credencial sintética de la prueba)
+USER_PASSWORD = "Usuario!2026"  # pragma: allowlist secret (credencial sintética de la prueba)
+ADMIN_PASSWORD = "Admin!2026"  # pragma: allowlist secret (credencial sintética de la prueba)
+NEW_PASSWORD = "Nueva!2026"  # pragma: allowlist secret (credencial sintética de la prueba)
 ANSWERS = ("Luna", "María", "Pecas")
 QUESTIONS = tuple(zip(SECURITY_QUESTIONS, ANSWERS))
 
