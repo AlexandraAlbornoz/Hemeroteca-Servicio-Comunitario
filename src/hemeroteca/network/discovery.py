@@ -15,6 +15,8 @@ DISCOVERY_PORT = 8766
 # Grupo IPv4 de alcance local administrativo. Las consultas salen con TTL 1.
 DISCOVERY_GROUP = '239.255.77.76'
 LOOPBACK = '127.0.0.1'
+PRIVATE_LANS = tuple(map(ipaddress.IPv4Network, ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')))
+MAX_UNICAST_PEERS = 254
 PROTOCOL = 'hemeroteca-pair-v1'
 
 
@@ -128,6 +130,122 @@ def _ready(sockets, timeout):
     return select(sockets, [], [], timeout)[0]
 
 
+def _windows_ipv4_subnets():
+    """Lee las máscaras IPv4 de Windows sin cambiar rutas ni reglas de red."""
+    if sys.platform != 'win32':
+        return {}
+
+    import ctypes
+    from ctypes import wintypes
+
+    class AddressRow(ctypes.Structure):
+        _fields_ = [
+            ('address', wintypes.DWORD),
+            ('index', wintypes.DWORD),
+            ('mask', wintypes.DWORD),
+            ('broadcast', wintypes.DWORD),
+            ('reassembly_size', wintypes.DWORD),
+            ('reserved', wintypes.WORD),
+            ('flags', wintypes.WORD),
+        ]
+
+    class AddressTableHeader(ctypes.Structure):
+        _fields_ = [('count', wintypes.DWORD), ('rows', AddressRow * 0)]
+
+    get_table = ctypes.WinDLL('Iphlpapi.dll').GetIpAddrTable
+    get_table.argtypes = (ctypes.c_void_p, ctypes.POINTER(wintypes.ULONG), wintypes.BOOL)
+    get_table.restype = wintypes.DWORD
+    size = wintypes.ULONG()
+    if get_table(None, ctypes.byref(size), False) != 122:  # ERROR_INSUFFICIENT_BUFFER
+        return {}
+    buffer = ctypes.create_string_buffer(size.value)
+    if get_table(buffer, ctypes.byref(size), False) != 0:
+        return {}
+
+    header = AddressTableHeader.from_buffer(buffer)
+    rows = (AddressRow * header.count).from_buffer(buffer, AddressTableHeader.rows.offset)
+    networks = {}
+    for row in rows:
+        if row.flags & 0x00C8:  # Dirección desconectada, eliminada o transitoria.
+            continue
+        address = socket.inet_ntoa(row.address.to_bytes(4, sys.byteorder))
+        mask = socket.inet_ntoa(row.mask.to_bytes(4, sys.byteorder))
+        try:
+            network = ipaddress.IPv4Network((address, mask), strict=False)
+        except ValueError:
+            continue
+        if 24 <= network.prefixlen <= 30 and any(network.subnet_of(private) for private in PRIVATE_LANS):
+            networks[address] = network
+    return networks
+
+
+def _probe(udp, payload, destination):
+    """Envía una consulta opcional sin cancelar la búsqueda en otras interfaces."""
+    try:
+        udp.sendto(payload, (destination, DISCOVERY_PORT))
+    except OSError:
+        logging.getLogger(__name__).debug('No se pudo consultar una dirección de la LAN.', exc_info=True)
+
+
+def _collect_invitations(sockets, nonce, found, timeout, address):
+    """Filtra las respuestas usando el nonce y los límites de la invitación."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and len(found) < 32:
+        for udp in _ready(sockets, .3):
+            if len(found) == 32:
+                return
+            try:
+                payload, origin = udp.recvfrom(4096)
+                item = json.loads(payload)
+                if item.get('protocol') != PROTOCOL or item.get('nonce') != nonce or not private_ip(origin[0]):
+                    continue
+                if address is not None and origin[0] != address:
+                    continue
+                if not isinstance(item.get('invitation_id'), str) or not isinstance(item.get('name'), str):
+                    continue
+                port = int(item['port'])
+                if not 1024 <= port <= 65535 or int(item['expires_at']) < time.time():
+                    continue
+                item['name'] = ''.join(char for char in item['name'][:80] if char.isprintable()) or 'PC de consulta'
+                item['url'] = f'https://{origin[0]}:{port}'
+                found[item['invitation_id']] = item
+            except (socket.timeout, ValueError, KeyError, TypeError, AttributeError, OverflowError):
+                continue
+            except OSError as error:
+                if not _is_udp_reset(error):
+                    raise
+
+
+def _discover_without_multicast(sockets, payload, nonce, found):
+    """Consulta solamente puertos de Hemeroteca en las subredes privadas conectadas."""
+    try:
+        networks = _windows_ipv4_subnets()
+    except (AttributeError, OSError, ValueError):
+        logging.getLogger(__name__).debug('No se pudieron consultar las subredes locales.', exc_info=True)
+        return
+    interfaces = {address: udp for address, udp in sockets.items() if address in networks}
+    if not interfaces:
+        return
+
+    for address, udp in interfaces.items():
+        _probe(udp, payload, address)
+    _collect_invitations(interfaces.values(), nonce, found, .35, None)
+    if found:
+        return
+
+    # Una consulta por destino y hasta 254 en total. Se usa la máscara real.
+    visited = set(interfaces)
+    for address, udp in interfaces.items():
+        for peer in networks[address].hosts():
+            if len(visited) - len(interfaces) == MAX_UNICAST_PEERS:
+                break
+            destination = str(peer)
+            if destination not in visited:
+                visited.add(destination)
+                _probe(udp, payload, destination)
+    _collect_invitations(interfaces.values(), nonce, found, 1.2, None)
+
+
 def descubrir_esperando(timeout=3, *, address=None):
     """Busca invitaciones por multicast o consulta una IPv4 indicada por el operador."""
     if address is not None:
@@ -140,7 +258,7 @@ def descubrir_esperando(timeout=3, *, address=None):
     nonce, found = secrets.token_hex(16), {}
     consulta = json.dumps({'protocol': PROTOCOL, 'kind': 'discover', 'nonce': nonce}).encode()
     with ExitStack() as resources:
-        sockets = []
+        sockets = {}
         setup_error = None
         for interface in interfaces:
             with ExitStack() as candidate:
@@ -158,35 +276,12 @@ def descubrir_esperando(timeout=3, *, address=None):
                         setup_error = error
                         continue
                 resources.enter_context(candidate.pop_all())
-                sockets.append(udp)
+                sockets[interface] = udp
         if not sockets:
             raise OSError('No se pudo iniciar el descubrimiento en ninguna interfaz local.') from setup_error
-        plazo = time.monotonic() + timeout
-        while time.monotonic() < plazo and len(found) < 32:
-            for udp in _ready(sockets, .3):
-                if len(found) == 32:
-                    break
-                try:
-                    contenido, origen = udp.recvfrom(4096)
-                    elemento = json.loads(contenido)
-                    if elemento.get('protocol') != PROTOCOL or elemento.get('nonce') != nonce or not private_ip(origen[0]):
-                        continue
-                    if address is not None and origen[0] != address:
-                        continue
-                    if not isinstance(elemento.get('invitation_id'), str) or not isinstance(elemento.get('name'), str):
-                        continue
-                    puerto = int(elemento['port'])
-                    if not 1024 <= puerto <= 65535 or int(elemento['expires_at']) < time.time():
-                        continue
-                    elemento['name'] = ''.join(elemento_breve for elemento_breve in elemento['name'][:80] if elemento_breve.isprintable()) or 'PC de consulta'
-                    elemento['url'] = f'https://{origen[0]}:{puerto}'
-                    found[elemento['invitation_id']] = elemento
-                except (socket.timeout, ValueError, KeyError, TypeError, AttributeError, OverflowError):
-                    continue
-                except OSError as excepcion:
-                    # Un destino sin receptor no invalida las respuestas de otros.
-                    if not _is_udp_reset(excepcion):
-                        raise
+        _collect_invitations(sockets.values(), nonce, found, timeout, address)
+        if address is None and not found:
+            _discover_without_multicast(sockets, consulta, nonce, found)
     return list(found.values())
 # Alias del contrato anterior: conserva integraciones y llamadas RPC.
 discover_waiting = descubrir_esperando

@@ -91,6 +91,24 @@ class PruebasDescubrimiento(unittest.TestCase):
         with self.assertRaises(ValueError):
             module.discover_waiting(address='8.8.8.8')
 
+    def test_respaldo_udp_consulta_solo_la_subred_conectada(self):
+        wifi, other = Mock(), Mock()
+        network = module.ipaddress.IPv4Network('192.168.1.0/29')
+        sockets = {'192.168.1.2': wifi, '10.0.0.2': other}
+        found = {}
+
+        def collect(_sockets, _nonce, results, timeout, _address):
+            if timeout == 1.2:
+                results['pc'] = {'url': 'https://192.168.1.3:8767'}
+
+        with (patch.object(module, '_windows_ipv4_subnets', return_value={'192.168.1.2': network}),
+              patch.object(module, '_collect_invitations', side_effect=collect)):
+            module._discover_without_multicast(sockets, b'consulta', 'a' * 32, found)
+        self.assertEqual(found['pc']['url'], 'https://192.168.1.3:8767')
+        self.assertEqual([call.args[1] for call in wifi.sendto.call_args_list],
+                         [(f'192.168.1.{host}', module.DISCOVERY_PORT) for host in (2, 1, 3, 4, 5, 6)])
+        other.sendto.assert_not_called()
+
     def test_reinicios_udp_se_toleran_y_otros_errores_se_propagan(self):
         """Un puerto sin receptor no se confunde con un fallo general de red."""
         self.assertTrue(module._is_udp_reset(ConnectionResetError()))
