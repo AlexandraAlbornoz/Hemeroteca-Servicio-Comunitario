@@ -1,0 +1,122 @@
+name: Pruebas
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install --require-hashes -r requirements-lock.txt
+      - run: python -m pip install -e ".[quality]"
+      - run: python -m pip check
+      - run: python -m scripts.verificar_dependencias
+      - run: python -m coverage run -m unittest discover -s tests -v
+      - run: python -m coverage run --append -m tests.manual.pruebas_navegacion
+      - run: python -m coverage run --append -m tests.manual.pruebas_integracion
+      - run: python -m coverage run --append -m tests.manual.pruebas_carga_asincrona
+      - run: python -m coverage run --append -m tests.manual.pruebas_carga_asincrona --remoto
+      - run: python -m coverage report
+      - name: Cobertura mínima de autenticación y autorización
+        run: python -m coverage report --include="*/services/auth_service.py,*/services/access_service.py,*/utils/security.py" --fail-under=80
+      - name: Cobertura mínima del gestor de red
+        run: python -m coverage report --include="*/network/manager.py" --fail-under=99
+      - name: Cobertura mínima del servicio de respaldos
+        run: python -m coverage report --include="*/services/backup_service.py" --fail-under=99
+      - name: Cobertura mínima de la interfaz de respaldos
+        run: python -m coverage report --include="*/ui/backups_view.py" --fail-under=99
+      - name: Cobertura mínima del formato de respaldos
+        run: python -m coverage report --include="*/services/backup_archive.py" --fail-under=97
+      - name: Cobertura mínima de recuperación
+        run: python -m coverage report --include="*/ui/recovery_view.py" --fail-under=100
+      - name: Cobertura mínima de pantalla de red
+        run: python -m coverage report --include="*/ui/network_view.py" --fail-under=100
+      - name: Cobertura mínima de administración de usuarios
+        run: python -m coverage report --include="*/ui/users_view.py" --fail-under=100
+      - name: Cobertura mínima de mantenimiento
+        run: python -m coverage report --include="*/ui/mantenimiento_view.py" --fail-under=95
+      - name: Cobertura mínima de reportes
+        run: python -m coverage report --include="*/ui/reports_view.py" --fail-under=98
+      - name: Cobertura mínima de descubrimiento UDP
+        run: python -m coverage report --include="*/network/discovery.py" --fail-under=98
+      - name: Cobertura mínima de inicio de sesión
+        run: python -m coverage report --include="*/ui/login_view.py" --fail-under=100
+      - name: Cobertura mínima del servidor RPC
+        run: python -m coverage report --include="*/network/server.py" --fail-under=99
+      - name: Cobertura mínima de la pantalla de solicitudes
+        run: python -m coverage report --include="*/ui/requests_view.py" --fail-under=99
+      - name: Cobertura mínima de la pantalla de periódicos
+        run: python -m coverage report --include="*/ui/periodicos_view.py" --fail-under=100
+      - name: Cobertura mínima del servicio de solicitudes
+        run: python -m coverage report --include="*/services/request_service.py" --fail-under=98
+      - name: Cobertura mínima del servicio de periódicos
+        run: python -m coverage report --include="*/services/periodico_service.py" --fail-under=97
+      - name: Cobertura mínima de coordinación de cargas
+        run: python -m coverage report --include="*/ui/carga.py" --fail-under=95
+      - name: Cobertura mínima de trabajadores de interfaz
+        run: python -m coverage report --include="*/ui/tareas.py" --fail-under=99
+      - name: Cobertura mínima de sesión y navegación
+        run: python -m coverage report --include="*/ui/main_view.py" --fail-under=100
+      - name: Cobertura mínima de controles compartidos
+        run: python -m coverage report --include="*/ui/components.py" --fail-under=100
+      - name: Cobertura mínima de registros eliminados
+        run: python -m coverage report --include="*/ui/deleted_records_view.py" --fail-under=95
+      - name: Cobertura mínima de pantalla de auditoría
+        run: python -m coverage report --include="*/ui/audit_view.py" --fail-under=97
+      - name: Cobertura mínima de esquema y migraciones
+        run: python -m coverage report --include="*/database/schema.py" --fail-under=99
+      - name: Cobertura mínima de recuperación de cuentas
+        run: python -m coverage report --include="*/services/recovery_service.py" --fail-under=95
+      - name: Cobertura mínima del compositor PDF
+        run: python -m coverage report --include="*/utils/pdf_reports.py" --fail-under=95
+      - name: Cobertura mínima del servicio PDF
+        run: python -m coverage report --include="*/services/report_service.py" --fail-under=95
+      - name: Cobertura mínima de calendario y controles
+        run: python -m coverage report --include="*/ui/controles.py" --fail-under=100
+      - name: Cobertura mínima de conexión SQLite
+        run: python -m coverage report --include="*/database/connection.py" --fail-under=95
+      - name: Cobertura completa de utilidades y entradas pequeñas
+        run: python -m coverage report --include="*/utils/identity.py,*/utils/iconos.py,*/utils/verificacion_instalacion.py,*/hemeroteca/__main__.py,*/hemeroteca/backup_worker_entry.py" --fail-under=100
+      - name: Cobertura mínima del servicio de usuarios
+        run: python -m coverage report --include="*/services/user_service.py" --fail-under=99
+      - name: Cobertura mínima de autorización
+        run: python -m coverage report --include="*/services/access_service.py" --fail-under=95
+      - name: Cobertura mínima de emparejamiento
+        run: python -m coverage report --include="*/network/pairing.py" --fail-under=95
+      - name: Cobertura mínima de identidad de equipos
+        run: python -m coverage report --include="*/network/devices.py" --fail-under=95
+      - name: Cobertura mínima de utils/local_secrets.py
+        run: python -m coverage report --include="*/utils/local_secrets.py" --fail-under=95
+      - name: Cobertura mínima de services/auth_service.py
+        run: python -m coverage report --include="*/services/auth_service.py" --fail-under=99
+      - name: Cobertura mínima de network/client.py
+        run: python -m coverage report --include="*/network/client.py" --fail-under=99
+      - name: Cobertura mínima de database/barrera.py
+        run: python -m coverage report --include="*/database/barrera.py" --fail-under=95
+      - name: Cobertura mínima de services/audit_service.py
+        run: python -m coverage report --include="*/services/audit_service.py" --fail-under=95
+      - name: Cobertura mínima de network/configuration.py
+        run: python -m coverage report --include="*/network/configuration.py" --fail-under=95
+      - name: Cobertura mínima de network/http_server.py
+        run: python -m coverage report --include="*/network/http_server.py" --fail-under=95
+      - name: Cobertura mínima de transporte TLS
+        run: python -m coverage report --include="*/network/transport.py" --fail-under=95
+      - name: Cobertura mínima de backup_worker.py
+        run: python -m coverage report --include="*/backup_worker.py" --fail-under=95
+      - name: Cobertura mínima de utils/security.py
+        run: python -m coverage report --include="*/utils/security.py" --fail-under=97
+      - name: Cobertura mínima de main.py
+        run: python -m coverage report --include="*/main.py" --fail-under=95
+      - name: Cobertura mínima de ui/selector_hora.py
+        run: python -m coverage report --include="*/ui/selector_hora.py" --fail-under=95
+      - name: Cobertura mínima de fechas
+        run: python -m coverage report --include="*/utils/dates.py" --fail-under=97
+      - name: Cobertura mínima de validación de entradas
+        run: python -m coverage report --include="*/utils/validaciones.py" --fail-under=99

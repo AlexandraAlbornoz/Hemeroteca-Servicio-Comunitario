@@ -1,0 +1,4 @@
+customtkinter>=5.2
+Pillow>=10.0
+cryptography>=46.0,<52
+reportlab>=4.2,<5

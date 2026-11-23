@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hemeroteca"
+version = "2.4.0"
+description = "Aplicación de escritorio para gestionar una hemeroteca"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "GPL-3.0-only"
+dependencies = ["customtkinter>=5.2", "Pillow>=10.0", "cryptography>=46.0,<52", "reportlab>=4.2,<5"]
+
+[project.optional-dependencies]
+security = ["pip>=26.2", "pip-audit==2.10.1", "detect-secrets==1.5.0"]
+quality = ["coverage==7.17.3", "bandit==1.9.4", "ruff==0.17.5"]
+
+[project.scripts]
+hemeroteca = "hemeroteca.main:main"
+hemeroteca-backup = "hemeroteca.backup_worker:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hemeroteca = ["assets/*", "resources/windows/*"]
+
+[tool.ruff]
+target-version = "py313"
+extend-exclude = ["docs/historial"]
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82", "B006", "B008", "B018"]
+
+[tool.coverage.run]
+branch = true
+source = ["hemeroteca"]
+data_file = "quality-reports/.coverage"
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+fail_under = 100
