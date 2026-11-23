@@ -19,6 +19,10 @@ class PruebasDescubrimiento(unittest.TestCase):
     def setUp(self):
         self.enterContext(patch.object(module, '_discovery_interfaces', return_value=('192.168.1.1',)))
 
+    def make_responder(self, description):
+        with patch.object(module.sys, 'platform', 'win32'):
+            return module.DiscoveryResponder(description)
+
     def test_ips_y_direccion_local_sin_red_real(self):
         """Distingue rutas privadas válidas de bucle local, públicas e indisponibles."""
         for address, expected in (('192.168.1.2', True), ('127.0.0.1', True), ('0.0.0.0', False),
@@ -69,6 +73,24 @@ class PruebasDescubrimiento(unittest.TestCase):
         udp.sendto.assert_called_once()
         self.assertEqual(udp.sendto.call_args.args[1], (module.DISCOVERY_GROUP, module.DISCOVERY_PORT))
 
+    def test_busqueda_directa_ignora_respuestas_de_otra_ip(self):
+        udp = MagicMock()
+        udp.__enter__.return_value = udp
+        packet = json.dumps(dict(protocol=module.PROTOCOL, nonce='a' * 32, invitation_id='ficticia',
+                                 name='PC', port=8767, expires_at=2000)).encode()
+        udp.recvfrom.side_effect = [(packet, ('192.168.1.9', 8766)), (packet, ('192.168.1.2', 8766))]
+        with (patch.object(module, '_discovery_socket', return_value=udp),
+              patch.object(module, 'local_address', return_value='192.168.1.1'),
+              patch.object(module.secrets, 'token_hex', return_value='a' * 32),
+              patch.object(module.time, 'time', return_value=1000),
+              patch.object(module.time, 'monotonic', side_effect=count())):
+            found = module.discover_waiting(timeout=3, address='192.168.1.2')
+        self.assertEqual([entry['url'] for entry in found], ['https://192.168.1.2:8767'])
+        self.assertEqual(udp.sendto.call_args.args[1], ('192.168.1.2', module.DISCOVERY_PORT))
+        udp.setsockopt.assert_not_called()
+        with self.assertRaises(ValueError):
+            module.discover_waiting(address='8.8.8.8')
+
     def test_reinicios_udp_se_toleran_y_otros_errores_se_propagan(self):
         """Un puerto sin receptor no se confunde con un fallo general de red."""
         self.assertTrue(module._is_udp_reset(ConnectionResetError()))
@@ -106,14 +128,17 @@ class PruebasDescubrimiento(unittest.TestCase):
         group = socket.inet_aton(module.DISCOVERY_GROUP) + socket.inet_aton(interface)
         for platform, address in (('win32', interface), ('linux', module.DISCOVERY_GROUP)):
             with self.subTest(platform=platform):
-                lan, local = Mock(), Mock()
+                lan, multicast, local = Mock(), Mock(), Mock()
+                sockets = [lan, local] if platform == 'win32' else [lan, multicast, local]
                 with (patch.object(module.sys, 'platform', platform),
                       patch.object(module, '_discovery_interfaces', return_value=(interface, module.LOOPBACK)),
-                      patch.object(module, '_discovery_socket', side_effect=[lan, local])):
+                      patch.object(module, '_discovery_socket', side_effect=sockets)):
                     responder = module.DiscoveryResponder(lambda: None)
                 self.addCleanup(responder.close)
-                lan.bind.assert_called_once_with((address, module.DISCOVERY_PORT))
-                lan.setsockopt.assert_any_call(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, group)
+                lan.bind.assert_called_once_with((interface, module.DISCOVERY_PORT))
+                receiver = lan if platform == 'win32' else multicast
+                receiver.bind.assert_called_once_with((address, module.DISCOVERY_PORT))
+                receiver.setsockopt.assert_any_call(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, group)
                 local.bind.assert_called_once_with((module.LOOPBACK, module.DISCOVERY_PORT))
 
     def test_responder_descarta_entradas_y_limita_frecuencia(self):
@@ -123,7 +148,7 @@ class PruebasDescubrimiento(unittest.TestCase):
         packets = [b'{', b'[' * 1000 + b']' * 1000, b'[]', json.dumps(valid | {'kind': 'otra'}).encode(), json.dumps(valid | {'nonce': 1}).encode(),
                    json.dumps(valid).encode(), json.dumps(valid).encode()]
         with patch.object(module, '_discovery_socket', return_value=udp):
-            responder = module.DiscoveryResponder(lambda: {'name': 'Ficticia'})
+            responder = self.make_responder(lambda: {'name': 'Ficticia'})
         pending = iter(packets)
         def receive(size):
             """Finaliza el bucle cuando se agotan los paquetes sintéticos."""
@@ -141,7 +166,7 @@ class PruebasDescubrimiento(unittest.TestCase):
     def test_cierre_sin_arranque_es_seguro_y_repetible(self):
         """Limpiar una preparación fallida no exige haber podido iniciar el hilo."""
         with patch.object(module, '_discovery_socket', return_value=Mock()):
-            responder = module.DiscoveryResponder(lambda: None)
+            responder = self.make_responder(lambda: None)
         responder.close()
         responder.close()
         self.assertTrue(responder.stop.is_set())
@@ -158,7 +183,7 @@ class PruebasDescubrimiento(unittest.TestCase):
         udp.recvfrom.side_effect = receive
         udp.close.side_effect = released.set
         with patch.object(module, '_discovery_socket', return_value=udp):
-            responder = module.DiscoveryResponder(lambda: None)
+            responder = self.make_responder(lambda: None)
         responder.start()
         self.assertTrue(entered.wait(timeout=2))
         responder.close()

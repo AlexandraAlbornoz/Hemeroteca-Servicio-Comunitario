@@ -147,6 +147,11 @@ class ReceptorEmparejamiento:
             raise
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True, name='hemeroteca-autorizacion')
 
+    @property
+    def discovery_addresses(self):
+        """Direcciones locales que permiten consultar la invitación sin multicast."""
+        return tuple(self.discovery.addresses)
+
     def iniciar(self):
         'Inicia el trabajador o servidor y conserva su referencia para el cierre.'
         try:

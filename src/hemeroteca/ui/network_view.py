@@ -43,6 +43,9 @@ class VistaRed:
         self._paragraph(cuerpo, '1. Deja esta ventana abierta.\n2. En la PC principal, el maestro abre Computadoras conectadas y pulsa Buscar computadoras.\n3. El maestro selecciona el nombre de esta PC y escribe el código que aparece aquí.', color=INK).pack(fill='x', padx=18, pady=(0, 18))
         self._label(cuerpo, 'Nombre de esta computadora').pack(anchor='w', padx=18)
         self._paragraph(cuerpo, receptor.name, color=INK).pack(fill='x', padx=18, pady=(4, 18))
+        addresses = getattr(receptor, 'discovery_addresses', ())
+        if addresses:
+            self._paragraph(cuerpo, 'IPv4 para búsqueda directa: ' + ', '.join(addresses), color=INK).pack(fill='x', padx=18, pady=(0, 14))
         self._label(cuerpo, 'Código temporal de conexión').pack(anchor='w', padx=18)
         valor = ctk.CTkEntry(cuerpo, height=52, font=('Arial', 22, 'bold'), justify='center')
         valor.pack(fill='x', padx=18, pady=(6, 12))
@@ -145,12 +148,16 @@ class VistaRed:
         waiting.pack(fill='x', padx=6)
         estado = self._paragraph(cuerpo, '')
         estado.pack(fill='x', padx=18, pady=10)
+        address_row, address_field = self._entry(cuerpo, 'IPv4 de la PC de consulta (opcional)', '')
+        address_row.pack(fill='x', padx=18, pady=(0, 10))
         def search():
             'Obtiene los resultados que corresponden a los filtros elegidos.'
             search_boton.configure(state='disabled', text='Buscando…')
             recipiente.update_idletasks()
             try:
-                candidates = gestor.discover_computers(self.services, self.user)
+                address = address_field.get().strip()
+                options = {'address': address} if address else {}
+                candidates = gestor.discover_computers(self.services, self.user, **options)
             except (ValueError, OSError) as excepcion:
                 estado.configure(text=str(excepcion), text_color=RED)
                 search_boton.configure(state='normal', text='Buscar computadoras')
@@ -162,7 +169,7 @@ class VistaRed:
                 self._paragraph(fila, candidato['name'], color=INK).pack(fill='x', padx=12, pady=(10, 4))
                 self._button(fila, 'Conectar esta computadora', lambda elegida=candidato: self._approve_computer_form(elegida), 'secondary', width=260).pack(anchor='w', padx=12, pady=(0, 10))
             estado.configure(text=f'{len(candidates)} computadora(s) esperando autorización.' if candidates else
-                             'No encontramos computadoras en espera. Abre Preparar PC de consulta en la otra PC y comprueba que ambas estén en la misma red WiFi.', text_color=INK)
+                             'No encontramos computadoras en espera. Revisa que ambas estén en la misma red o introduce la IPv4 que muestra la PC de consulta.', text_color=INK)
             search_boton.configure(state='normal', text='Buscar computadoras')
         search_boton = self._primary(cuerpo, 'Buscar computadoras', search, width=240, state='normal' if activo else 'disabled')
         search_boton.pack(anchor='w', padx=18, pady=(0, 14))

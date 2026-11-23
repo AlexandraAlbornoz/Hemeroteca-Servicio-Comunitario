@@ -18,6 +18,10 @@ class PruebasDescubrimientoPendiente(unittest.TestCase):
     def valid(self, **kw):
         return dict(protocol=d.PROTOCOL,nonce='a'*32,invitation_id='invitacion',name='PC',port=8765,expires_at=2000)|kw
 
+    def make_responder(self, description):
+        with patch.object(d.sys, 'platform', 'win32'):
+            return d.DiscoveryResponder(description)
+
     def search(self, packets):
         udp=Mock()
         udp.__enter__=Mock(return_value=udp);udp.__exit__=Mock(return_value=False)
@@ -29,7 +33,7 @@ class PruebasDescubrimientoPendiente(unittest.TestCase):
 
     def responder(self, packets, description=None):
         udp=Mock()
-        with patch.object(d,'_discovery_socket',return_value=udp):r=d.DiscoveryResponder(description or (lambda:None))
+        with patch.object(d,'_discovery_socket',return_value=udp):r=self.make_responder(description or (lambda:None))
         pending=iter(packets)
         def receive(size):
             try:return next(pending)
@@ -55,13 +59,13 @@ class PruebasDescubrimientoPendiente(unittest.TestCase):
         for operation in ['setsockopt','bind','settimeout']:
             with self.subTest(operation=operation):
                 udp=Mock();getattr(udp,operation).side_effect=OSError('fallo')
-                with patch.object(d,'_discovery_socket',return_value=udp),self.assertRaises(OSError):d.DiscoveryResponder(lambda:None)
+                with patch.object(d,'_discovery_socket',return_value=udp),self.assertRaises(OSError):self.make_responder(lambda:None)
                 udp.close.assert_called_once()
 
     def test_error_preparando_hilo_libera_socket(self):
         udp=Mock()
         with patch.object(d,'_discovery_socket',return_value=udp),patch.object(d.threading,'Thread',side_effect=RuntimeError('sin recursos')),self.assertRaises(RuntimeError):
-            d.DiscoveryResponder(lambda:None)
+            self.make_responder(lambda:None)
         udp.close.assert_called_once()
 
     def test_descubrimiento_descarta_expiracion_infinita_y_deduplica(self):

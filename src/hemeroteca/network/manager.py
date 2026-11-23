@@ -138,14 +138,14 @@ class GestorRed:
         servicios = services
         return self.configure_server(servicios, responsable, contrasena, local_address(), self.settings.get('port', 8765))
 
-    def descubrir_computers(self, services, actor):
+    def descubrir_computers(self, services, actor, *, address=None):
         """Exige administración maestra en la PC principal y devuelve las invitaciones detectadas en la LAN."""
         responsable = actor
         servicios = services
         if servicios.read_only:
             raise AccessDenied('La búsqueda se realiza desde la PC principal.')
         servicios.access.require_access(responsable, action='Buscar computadoras en espera', master=True)
-        return discover_waiting()
+        return discover_waiting(address=address) if address else discover_waiting()
     # Alias del contrato anterior: conserva integraciones y llamadas RPC.
     discover_computers = descubrir_computers
 

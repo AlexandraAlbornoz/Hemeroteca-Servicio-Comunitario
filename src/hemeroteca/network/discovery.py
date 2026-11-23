@@ -112,10 +112,10 @@ def _discovery_interfaces():
     return (*private, LOOPBACK)
 
 
-def _configure_query(udp, interface):
+def _configure_query(udp, interface, multicast):
     """Recibe respuestas únicamente en la dirección que originó la búsqueda."""
     udp.bind((interface, 0))
-    if interface != LOOPBACK:
+    if multicast:
         udp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(interface))
         udp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
     udp.settimeout(.3)
@@ -128,22 +128,29 @@ def _ready(sockets, timeout):
     return select(sockets, [], [], timeout)[0]
 
 
-def descubrir_esperando(timeout=3):
-    """Busca invitaciones en las interfaces privadas y devuelve hasta 32 equipos."""
+def descubrir_esperando(timeout=3, *, address=None):
+    """Busca invitaciones por multicast o consulta una IPv4 indicada por el operador."""
+    if address is not None:
+        if not private_ip(address) or ipaddress.IPv4Address(address).is_reserved:
+            raise ValueError('Introduce una dirección IPv4 privada de la PC de consulta.')
+        interface = LOOPBACK if address.startswith('127.') else local_address(address)
+        interfaces = (interface,)
+    else:
+        interfaces = _discovery_interfaces()
     nonce, found = secrets.token_hex(16), {}
     consulta = json.dumps({'protocol': PROTOCOL, 'kind': 'discover', 'nonce': nonce}).encode()
     with ExitStack() as resources:
         sockets = []
         setup_error = None
-        for interface in _discovery_interfaces():
+        for interface in interfaces:
             with ExitStack() as candidate:
                 udp = candidate.enter_context(_discovery_socket())
+                destination = address or (LOOPBACK if interface == LOOPBACK else DISCOVERY_GROUP)
                 try:
-                    _configure_query(udp, interface)
+                    _configure_query(udp, interface, destination == DISCOVERY_GROUP)
                 except OSError as error:
                     setup_error = error
                     continue
-                destination = LOOPBACK if interface == LOOPBACK else DISCOVERY_GROUP
                 try:
                     udp.sendto(consulta, (destination, DISCOVERY_PORT))
                 except OSError as error:
@@ -163,6 +170,8 @@ def descubrir_esperando(timeout=3):
                     contenido, origen = udp.recvfrom(4096)
                     elemento = json.loads(contenido)
                     if elemento.get('protocol') != PROTOCOL or elemento.get('nonce') != nonce or not private_ip(origen[0]):
+                        continue
+                    if address is not None and origen[0] != address:
                         continue
                     if not isinstance(elemento.get('invitation_id'), str) or not isinstance(elemento.get('name'), str):
                         continue
@@ -197,15 +206,21 @@ class DiscoveryResponder:
             if sys.platform == 'win32':
                 listeners = [(interface, (interface,)) for interface in lan]
             else:
-                listeners = [(DISCOVERY_GROUP, lan)] if lan else []
+                # En Unix los sockets unidos al grupo y a cada IP reciben destinos distintos.
+                listeners = [(interface, ()) for interface in lan]
+                if lan:
+                    listeners.append((DISCOVERY_GROUP, lan))
             if LOOPBACK in interfaces:
                 listeners.append((LOOPBACK, (LOOPBACK,)))
             error = None
             listening_on_lan = False
+            self.addresses = []
             for address, memberships in listeners:
                 try:
                     self._open_listener(address, memberships)
                     listening_on_lan |= address != LOOPBACK
+                    if address in lan:
+                        self.addresses.append(address)
                 except OSError as exception:
                     error = exception
                     if address != LOOPBACK:
