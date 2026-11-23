@@ -92,7 +92,7 @@ def principal():
             completar(dialogo, {f'{numero}. {pregunta}': respuesta for numero, (pregunta, respuesta) in enumerate(preguntas, 1)})
             pulsar(dialogo, 'Recuperar acceso')
             assert aplicacion.user['must_change_password']
-            completar(aplicacion, {'Nueva contraseña': 'Pregunt!2026', 'Confirmar nueva contraseña': 'Pregunt!2026'})
+            completar(aplicacion, {'Nueva contraseña': 'Pregunt!2026', 'Confirmar nueva contraseña': 'Pregunt!2026'})  # pragma: allowlist secret (credencial sintética de la prueba)
             pulsar(aplicacion, 'Guardar contraseña')
             codigo_por_preguntas = conservar_codigo()
             assert codigo_por_preguntas != codigo_inicial
@@ -117,7 +117,7 @@ def principal():
             assert documentos[0].get() == 'E-810001'
             documentos[0].tipo.set('V')
             pulsar(dialogo_actual(), 'Recuperar acceso')
-            completar(aplicacion, {'Nueva contraseña': 'Codigo!2026', 'Confirmar nueva contraseña': 'Codigo!2026'})
+            completar(aplicacion, {'Nueva contraseña': 'Codigo!2026', 'Confirmar nueva contraseña': 'Codigo!2026'})  # pragma: allowlist secret (credencial sintética de la prueba)
             pulsar(aplicacion, 'Guardar contraseña')
             codigo_por_codigo = conservar_codigo()
             assert codigo_por_codigo != codigo_por_preguntas
