@@ -1,0 +1,18 @@
+Hemeroteca 2.2.11 — Carga de pantallas
+
+Se reduce el trabajo repetido al cambiar de pantalla. Los controles se muestran
+cuando termina la construcción de la vista, evitando redibujos intermedios.
+Las operaciones rápidas ya no crean ventanas de progreso ocultas. Las tareas
+que duran más de 250 milisegundos siguen mostrando su indicador de progreso.
+La limpieza de memoria se agrupa al entrar y salir de la construcción de cada
+pantalla y sigue ejecutándose en el hilo de la interfaz.
+
+Se conservan las consultas actuales, la comprobación de permisos, la paginación,
+los filtros, los formularios y la coordinación de operaciones en segundo plano.
+No se cambian el esquema ni los datos de la base de datos.
+
+Prueba local comparable: ocho pantallas, dos recorridos, base sintética aislada,
+incluido el procesamiento de eventos de dibujo. Promedio anterior: 764 ms;
+promedio optimizado: 463 ms (39,4 % menos tiempo). Estas mediciones describen
+este equipo y esta carga de prueba; no predicen los tiempos de un servidor remoto
+ni de bases con otros volúmenes de datos.

@@ -1,0 +1,18 @@
+HEMEROTECA 2.4.2 · COPIA PORTABLE CON CORRECCIÓN DE RED
+
+Extrae el ZIP completo en las dos computadoras y abre Hemeroteca.exe.
+Cierra la versión anterior antes de abrir la copia para liberar sus puertos.
+
+1. En la PC principal, entra como administrador maestro. Si es la primera vez
+   en esta copia, activa la PC principal desde Computadoras conectadas.
+2. En la PC de consulta, pulsa Preparar PC de consulta y deja abierta la ventana.
+3. En la principal, pulsa Buscar computadoras, elige la PC de consulta y
+   autorízala con el código temporal y tu contraseña de administrador maestro.
+
+Si Windows bloquea una conexión, el aviso indica qué PC revisar. El botón
+Permitir la red en Windows configura el acceso en la red privada.
+
+La copia guarda su colección y configuración por separado, en
+%LOCALAPPDATA%\Hemeroteca-2.4.2-solo-consulta\data.
+Para probar con tu colección existente, restaura en la copia un respaldo
+de Hemeroteca.

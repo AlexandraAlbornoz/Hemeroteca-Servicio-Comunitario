@@ -1,0 +1,31 @@
+Hemeroteca 2.2.12 — Reutilización y documentación
+
+Se comparten las dependencias de conexión y autorización entre seis servicios,
+sin alterar sus firmas públicas ni sus alias de compatibilidad.
+
+La paginación SQL de ejemplares y fechas sin publicación utiliza el mismo
+componente que los listados administrativos. Conserva filtros, mensajes de
+validación, orden y el límite especial de los últimos cinco registros.
+
+Los campos de texto, cédula, fecha y selección comparten su contenedor y etiqueta.
+Once operaciones de limpieza de vistas reutilizan una función que conserva los
+eventos de destrucción de controles y barras de paginación.
+
+El estilo de tablas se configura una vez por raíz Tk y se restablece si cambia
+el tema. Ya no se repiten cambios globales de tema al crear cada tabla.
+
+El servidor reutiliza el JSON que ya había validado en vez de decodificarlo otra
+vez. Los permisos disponibles se calculan leyendo solo los permisos pendientes
+distintos del alcance autorizado, sin cargar el historial completo de solicitudes.
+
+Se mantienen las comprobaciones vigentes de autorización y las verificaciones
+transaccionales. No se cachean datos de usuario ni permisos, ni se cambian las
+reglas de negocio, el esquema o el contenido de la base de datos.
+
+Se sustituyen 236 docstrings genéricos por explicaciones concretas y se documentan
+las nuevas abstracciones y sus contratos. El generador documentar_codigo.py crea
+docs/REFERENCIA_CODIGO.html y verifica que no falten descripciones de funciones o
+clases. La documentación se comprueba también al ejecutar verificar_version.py.
+
+La referencia comprende el código Python propio, incluidas funciones anidadas,
+pruebas y herramientas de empaquetado. No modifica dependencias de terceros.

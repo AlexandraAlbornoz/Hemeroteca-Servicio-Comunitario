@@ -1,0 +1,19 @@
+Hemeroteca 2.2.4 — Correcciones verificadas de QA
+
+- La exportación PDF acepta Desde, Hasta y ambos límites del calendario.
+- Los atajos de eliminados comparan instantes UTC; la fecha visible y los filtros
+  por calendario mantienen la hora de Caracas.
+- Los eventos nuevos de auditoría guardan zona UTC explícita.
+- Política del historial: las fechas antiguas sin zona se interpretan como hora
+  de Caracas UTC-04:00. No se altera su texto ni se reescriben registros previos.
+- Las fechas repetidas de auditoría reutilizan una caché acotada, reduciendo el
+  coste de filtrar un historial extenso sin cambiar los resultados.
+- Año, Mes y Día quedan alineados junto al calendario, manteniendo filtros
+  parciales y las funciones existentes.
+- Una desconexión TLS esperada del cliente se registra brevemente; los errores
+  inesperados conservan su diagnóstico completo.
+- El instalador y el desinstalador esperan brevemente a que Windows libere un
+  ejecutable recién cerrado, sin tocar archivos que sigan en uso.
+
+La actualización conserva cuentas, contraseñas, recuperación, datos ficticios,
+permisos, red, historial y respaldos. No requiere migrar el esquema 6.

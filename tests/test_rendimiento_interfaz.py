@@ -6,8 +6,8 @@ import tkinter as tk
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from hemeroteca.services.container import create_services
-from hemeroteca.ui.tareas import ServiciosDeInterfaz
+from services.container import create_services
+from ui.tareas import ServiciosDeInterfaz
 
 
 class RedPrueba:
@@ -44,7 +44,7 @@ class PruebasRendimientoInterfaz(unittest.TestCase):
     def test_agrupacion_anidada_restaura_memoria_tras_error(self):
         """Un error no deja desactivada la recolección ni niveles pendientes."""
         estado = gc.isenabled()
-        with patch('hemeroteca.ui.tareas.gc.collect', wraps=gc.collect) as recolectar:
+        with patch('ui.tareas.gc.collect', wraps=gc.collect) as recolectar:
             with self.assertRaisesRegex(ValueError, 'Error de prueba'):
                 with self.servicios.agrupar_interfaz():
                     with self.servicios.agrupar_interfaz():
@@ -58,7 +58,7 @@ class PruebasRendimientoInterfaz(unittest.TestCase):
 
     def test_operacion_rapida_no_crea_ventana(self):
         """Las consultas rápidas conservan su resultado sin crear diálogos ocultos."""
-        with patch('hemeroteca.ui.tareas.tk.Toplevel', wraps=tk.Toplevel) as ventana:
+        with patch('ui.tareas.tk.Toplevel', wraps=tk.Toplevel) as ventana:
             self.assertEqual(self.servicios.network.consultar(), {'resultado': 'vigente'})
             ventana.assert_not_called()
 
@@ -67,7 +67,7 @@ class PruebasRendimientoInterfaz(unittest.TestCase):
         modal = tk.Toplevel(self.raiz)
         modal.update()
         modal.grab_set()
-        with patch('hemeroteca.ui.tareas.tk.Toplevel', wraps=tk.Toplevel) as ventana:
+        with patch('ui.tareas.tk.Toplevel', wraps=tk.Toplevel) as ventana:
             self.assertEqual(self.servicios.network.consultar(demora=.4), {'resultado': 'vigente'})
             self.assertEqual(ventana.call_count, 1)
         self.assertEqual(self.raiz.grab_current(), modal)

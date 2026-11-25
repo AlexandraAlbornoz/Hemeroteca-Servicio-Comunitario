@@ -1,8 +1,8 @@
 """Rangos inclusivos, combinación de filtros y motivo editable sin datos reales."""
 import unittest
-from hemeroteca.config.settings import NATIONAL, SECURITY_QUESTIONS
-from hemeroteca.services.container import create_services
-from hemeroteca.services.periodico_service import issue_search_query
+from config.settings import NATIONAL, SECURITY_QUESTIONS
+from services.container import create_services
+from services.periodico_service import issue_search_query
 
 
 class PruebasRangosFlujos(unittest.TestCase):

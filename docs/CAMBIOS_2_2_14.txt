@@ -1,0 +1,1 @@
+Hemeroteca 2.2.14: Auditoría. Usuario acepta únicamente letras, tildes y espacios, también al pegar. Hora se elige mediante listas compactas de horas (00–23) y minutos (00–59), con limpieza del filtro. Conserva consultas, permisos y filtros recordados. No modifica registros, cuentas ni credenciales.

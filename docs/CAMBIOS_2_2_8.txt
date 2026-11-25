@@ -1,0 +1,20 @@
+Hemeroteca 2.2.8 — Desplazamiento y navegación
+
+La rueda continúa sobre campos, botones y tablas. Los controles con contenido
+desplazable reciben la rueda primero; al llegar a sus límites, el formulario
+continúa desplazándose. Los movimientos pequeños del panel táctil se acumulan.
+Los selectores cerrados nunca se abren por pasar la rueda sobre ellos.
+Las listas desplegadas conservan su desplazamiento independiente.
+
+La paginación permanece fija al pie de la pantalla. Cada conjunto identifica
+sus resultados y ofrece Anterior, Siguiente, Ir a filtros y Ver resultados.
+Catálogo distingue Ejemplares y Fechas sin publicación. Al cambiar de página,
+se muestran los resultados nuevos. Las barras se retiran al cambiar de vista.
+
+El menú lateral reduce espacios para mostrar sus opciones en ventanas bajas.
+Las acciones del catálogo indican Editar seleccionado y Eliminar seleccionado.
+Los botones de página disponibles usan azul; los deshabilitados, fondo claro.
+
+Verificado con datos ficticios en las ocho pantallas principales a 900x600 y
+1280x800, incluyendo límites de scroll, cambio de página y limpieza de barras.
+No cambia la base de datos, los permisos ni las operaciones existentes.

@@ -41,3 +41,5 @@ audit-results.json
 quality-reports/
 .ruff_cache/
 coverage.xml
+/.build/
+*.sfx

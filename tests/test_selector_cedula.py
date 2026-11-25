@@ -2,7 +2,7 @@
 import tkinter as tk
 import unittest
 import customtkinter as ctk
-from hemeroteca.ui.controles import EntradaDocumento
+from ui.controles import EntradaDocumento
 
 
 class PruebasSelectorCedula(unittest.TestCase):
@@ -76,11 +76,7 @@ class PruebasSelectorCedula(unittest.TestCase):
         documento.pack(padx=20, pady=20)
         dialogo.grab_set()
         self.raiz.update()
-        # Los clics sintéticos dentro de un grab modal pueden ser reenviados
-        # por Windows a la lista recién abierta. El clic del selector se cubre
-        # en los dos casos anteriores; aquí se comprueba solo la captura.
-        documento.tipo._open_dropdown_menu()
-        self.raiz.update()
+        self.pulsar(documento.tipo._entry)
         self.elegir_extranjero(documento.tipo)
         self.assertEqual(self.raiz.grab_current(), dialogo)
         dialogo.destroy()

@@ -11,18 +11,18 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from hemeroteca.config.settings import NATIONAL, REGIONAL, ROLES, SECURITY_QUESTIONS
-from hemeroteca.main import create_services
-from hemeroteca.services.access_service import AccessDenied
-from hemeroteca.utils.dates import parse_filter_date
-from hemeroteca.utils.security import normalize_security_answer, password_matches, prepare_security_questions
-from hemeroteca.ui.login_view import LoginView
+from config.settings import NATIONAL, REGIONAL, ROLES, SECURITY_QUESTIONS
+from main import create_services
+from services.access_service import AccessDenied
+from utils.dates import parse_filter_date
+from utils.security import normalize_security_answer, password_matches, prepare_security_questions
+from ui.login_view import LoginView
 
 
-MASTER_PASSWORD = "Maestro!2026"  # pragma: allowlist secret (credencial sintética de la prueba)
-USER_PASSWORD = "Usuario!2026"  # pragma: allowlist secret (credencial sintética de la prueba)
-ADMIN_PASSWORD = "Admin!2026"  # pragma: allowlist secret (credencial sintética de la prueba)
-NEW_PASSWORD = "Nueva!2026"  # pragma: allowlist secret (credencial sintética de la prueba)
+MASTER_PASSWORD = "Maestro!2026"
+USER_PASSWORD = "Usuario!2026"
+ADMIN_PASSWORD = "Admin!2026"
+NEW_PASSWORD = "Nueva!2026"
 ANSWERS = ("Luna", "María", "Pecas")
 QUESTIONS = tuple(zip(SECURITY_QUESTIONS, ANSWERS))
 
@@ -265,7 +265,7 @@ class ValidationTests(unittest.TestCase):
 
     def test_26_wrong_recovery_codes_persist_failure_and_block_after_five_attempts(self):
         'Verifica la validación y conservación de datos del caso test_26_wrong_recovery_codes_persist_failure_and_block_after_five_attempts.'
-        with patch('hemeroteca.services.auth_service.time.time', return_value=1_000_000):
+        with patch('services.auth_service.time.time', return_value=1_000_000):
             for attempt in range(1, 6):
                 with self.assertRaises(AccessDenied):
                     self.s.auth.authenticate_with_code('V-10000001', 'Incorrecto')
@@ -297,17 +297,17 @@ class ValidationTests(unittest.TestCase):
             path = Path(directory) / 'prueba.db'
             temporary = create_services(path)
             self.s.connection.backup(temporary.connection)
-            with patch('hemeroteca.services.auth_service.time.time', return_value=1_000_000):
+            with patch('services.auth_service.time.time', return_value=1_000_000):
                 for _ in range(5):
                     with self.assertRaises(AccessDenied):
                         temporary.auth.authenticate_with_code('V-10000001', 'Incorrecto')
             temporary.close()
             reopened = create_services(path)
             try:
-                with patch('hemeroteca.services.auth_service.time.time', return_value=1_000_001):
+                with patch('services.auth_service.time.time', return_value=1_000_001):
                     with self.assertRaisesRegex(AccessDenied, 'bloqueado'):
                         reopened.auth.authenticate_with_code('V-10000001', self.master_result.recovery_code)
-                with patch('hemeroteca.services.auth_service.time.time', return_value=1_000_901):
+                with patch('services.auth_service.time.time', return_value=1_000_901):
                     actor = reopened.auth.authenticate_with_code('V-10000001', self.master_result.recovery_code)
                     self.assertTrue(actor['must_change_password'])
             finally:
@@ -347,14 +347,14 @@ class ValidationTests(unittest.TestCase):
 
     def test_34_delete_removes_related_user_data_but_preserves_inventory_and_audit(self):
         'Verifica la validación y conservación de datos del caso test_34_delete_removes_related_user_data_but_preserves_inventory_and_audit.'
-        request = self.s.requests.submit_request(self.admin, "Registrar ejemplares", "Prueba de permiso")
+        request = self.s.requests.submit_request(self.user, "Registrar ejemplares", "Prueba de permiso")
         self.s.requests.decide_request(self.master, request, True)
-        self.s.requests.submit_request(self.admin, "Auditoría", "Otra prueba")
+        self.s.requests.submit_request(self.user, "Auditoría", "Otra prueba")
         issue_id = self.save_issue()
-        self.s.users.delete_user(self.master, self.admin_id, MASTER_PASSWORD)
-        self.assertIsNone(self.row(self.admin_id))
+        self.s.users.delete_user(self.master, self.user_id, MASTER_PASSWORD)
+        self.assertIsNone(self.row(self.user_id))
         for table in ("user_security", "grants", "requests"):
-            self.assertEqual(self.s.connection.execute(f"SELECT count(*) FROM {table} WHERE user_id=?", (self.admin_id,)).fetchone()[0], 0)
+            self.assertEqual(self.s.connection.execute(f"SELECT count(*) FROM {table} WHERE user_id=?", (self.user_id,)).fetchone()[0], 0)
         self.assertIsNotNone(self.s.periodicos.get_issue(self.master, issue_id))
         self.assertTrue(any("Cuenta eliminada" in row["action"] for row in self.s.audit.list_events(self.master)))
 
@@ -445,63 +445,61 @@ class ValidationTests(unittest.TestCase):
 
     def test_45_request_rejects_unknown_permission_and_invalid_reason(self):
         'Verifica la validación y conservación de datos del caso test_45_request_rejects_unknown_permission_and_invalid_reason.'
-        self.rejects(ValueError, self.s.requests.submit_request, self.admin, "No existe", "Motivo")
+        self.rejects(ValueError, self.s.requests.submit_request, self.user, "No existe", "Motivo")
         for reason in ("", " ", "x" * 1001):
-            self.rejects(ValueError, self.s.requests.submit_request, self.admin, "Registrar ejemplares", reason)
+            self.rejects(ValueError, self.s.requests.submit_request, self.user, "Registrar ejemplares", reason)
 
     def test_46_request_rejects_existing_permission_or_pending_duplicate(self):
         'Verifica la validación y conservación de datos del caso test_46_request_rejects_existing_permission_or_pending_duplicate.'
         self.s.connection.execute("INSERT INTO grants(user_id,permission) VALUES(?,?)", (self.admin_id, 'Registrar ejemplares'))
         self.s.connection.commit()
         self.rejects(ValueError, self.s.requests.submit_request, self.admin, "Registrar ejemplares", "Motivo")
-        self.s.connection.execute("DELETE FROM grants WHERE user_id=? AND permission=?", (self.admin_id, 'Registrar ejemplares'))
-        self.s.connection.commit()
-        self.s.requests.submit_request(self.admin, "Registrar ejemplares", "Motivo")
-        self.rejects(ValueError, self.s.requests.submit_request, self.admin, "Registrar ejemplares", "Motivo repetido")
+        self.s.requests.submit_request(self.user, "Registrar ejemplares", "Motivo")
+        self.rejects(ValueError, self.s.requests.submit_request, self.user, "Registrar ejemplares", "Motivo repetido")
 
     def test_47_request_accepts_1000_characters_and_only_master_can_decide(self):
         'Verifica la validación y conservación de datos del caso test_47_request_accepts_1000_characters_and_only_master_can_decide.'
-        request = self.s.requests.submit_request(self.admin, "Registrar ejemplares", "x" * 1000)
+        request = self.s.requests.submit_request(self.user, "Registrar ejemplares", "x" * 1000)
         for actor in (self.user, self.admin, None):
             self.rejects(AccessDenied, self.s.requests.decide_request, actor, request, True)
         self.s.requests.decide_request(self.master, request, True, "Aprobado")
-        self.assertIn("Registrar ejemplares", self.s.access.permissions(self.admin))
-        self.s.periodicos.save_record(self.admin, self.issue_values())
+        self.assertIn("Registrar ejemplares", self.s.access.permissions(self.user))
+        self.s.periodicos.save_record(self.user, self.issue_values())
 
     def test_48_rejection_requires_reason_and_response_is_limited(self):
         'Verifica la validación y conservación de datos del caso test_48_rejection_requires_reason_and_response_is_limited.'
-        request = self.s.requests.submit_request(self.admin, "Auditoría", "Motivo")
+        request = self.s.requests.submit_request(self.user, "Auditoría", "Motivo")
         self.rejects(ValueError, self.s.requests.decide_request, self.master, request, False, " ")
         self.rejects(ValueError, self.s.requests.decide_request, self.master, request, True, "x" * 1001)
 
     def test_49_request_cannot_be_decided_twice_or_for_inactive_user(self):
         'Verifica la validación y conservación de datos del caso test_49_request_cannot_be_decided_twice_or_for_inactive_user.'
-        request = self.s.requests.submit_request(self.admin, "Auditoría", "Motivo")
-        self.s.users.set_user_active(self.master, self.admin_id, False)
+        request = self.s.requests.submit_request(self.user, "Auditoría", "Motivo")
+        self.s.users.set_user_active(self.master, self.user_id, False)
         self.rejects(ValueError, self.s.requests.decide_request, self.master, request, True)
         self.s.requests.decide_request(self.master, request, False, "Cuenta inactiva")
         self.rejects(ValueError, self.s.requests.decide_request, self.master, request, True)
 
     def test_50_request_rejects_a_decision_on_changed_account(self):
         'Verifica la validación y conservación de datos del caso test_50_request_rejects_a_decision_on_changed_account.'
-        request = self.s.requests.submit_request(self.admin, "Auditoría", "Motivo")
-        old = self.admin["password_version"]
-        self.s.users.reset_password(self.master, self.admin_id, MASTER_PASSWORD, NEW_PASSWORD)
+        request = self.s.requests.submit_request(self.user, "Auditoría", "Motivo")
+        old = self.user["password_version"]
+        self.s.users.reset_password(self.master, self.user_id, MASTER_PASSWORD, NEW_PASSWORD)
         self.rejects(ValueError, self.s.requests.decide_request, self.master, request, True, expected_account_version=old)
 
     def test_51_revocation_takes_effect_during_existing_session(self):
         'Verifica la validación y conservación de datos del caso test_51_revocation_takes_effect_during_existing_session.'
-        request = self.s.requests.submit_request(self.admin, "Registrar ejemplares", "Motivo")
+        request = self.s.requests.submit_request(self.user, "Registrar ejemplares", "Motivo")
         self.s.requests.decide_request(self.master, request, True)
-        self.s.users.revoke_grant(self.master, self.admin_id, "Registrar ejemplares")
-        self.rejects(AccessDenied, self.s.periodicos.save_record, self.admin, self.issue_values())
+        self.s.users.revoke_grant(self.master, self.user_id, "Registrar ejemplares")
+        self.rejects(AccessDenied, self.s.periodicos.save_record, self.user, self.issue_values())
 
     def test_52_regular_user_cannot_view_other_users_requests_or_audit(self):
         'Verifica la validación y conservación de datos del caso test_52_regular_user_cannot_view_other_users_requests_or_audit.'
         self.s.requests.submit_request(self.admin, "Usuarios", "Motivo del administrador")
-        self.rejects(AccessDenied, self.s.requests.submit_request, self.user, "Auditoría", "Motivo del usuario")
-        self.rejects(AccessDenied, self.s.requests.requests, self.user)
-        self.assertEqual(len(self.s.requests.requests(self.master)), 1)
+        self.s.requests.submit_request(self.user, "Auditoría", "Motivo del usuario")
+        self.assertEqual(len(self.s.requests.requests(self.user)), 1)
+        self.assertEqual(len(self.s.requests.requests(self.master)), 2)
         self.rejects(AccessDenied, self.s.audit.list_events, self.user)
         self.rejects(AccessDenied, self.s.users.users, self.user)
 
@@ -540,7 +538,7 @@ class FormValidationTests(unittest.TestCase):
             _setup_mode=setup, _security_questions_form=Mock(),
         )
 
-    @patch("hemeroteca.ui.login_view.messagebox.showwarning")
+    @patch("ui.login_view.messagebox.showwarning")
     def test_55_form_blocks_missing_fields_and_short_password(self, warning):
         'Verifica la validación y conservación de datos del caso test_55_form_blocks_missing_fields_and_short_password.'
         for fields in ({"name": " "}, {"identity": " "}, {"password": "1234567", "confirmation": "1234567"}):
@@ -550,7 +548,7 @@ class FormValidationTests(unittest.TestCase):
             warning.assert_called_once()
             form._security_questions_form.assert_not_called()
 
-    @patch("hemeroteca.ui.login_view.messagebox.showwarning")
+    @patch("ui.login_view.messagebox.showwarning")
     def test_56_form_blocks_password_confirmation_mismatch(self, warning):
         'Verifica la validación y conservación de datos del caso test_56_form_blocks_password_confirmation_mismatch.'
         form = self.registration_form(confirmation=NEW_PASSWORD)
@@ -558,7 +556,7 @@ class FormValidationTests(unittest.TestCase):
         self.assertIn("no coinciden", warning.call_args.args[1])
         form._security_questions_form.assert_not_called()
 
-    @patch("hemeroteca.ui.login_view.messagebox.showwarning")
+    @patch("ui.login_view.messagebox.showwarning")
     def test_57_initial_form_routes_to_master_security_questions(self, warning):
         'Verifica la validación y conservación de datos del caso test_57_initial_form_routes_to_master_security_questions.'
         form = self.registration_form(setup=True)
@@ -566,7 +564,7 @@ class FormValidationTests(unittest.TestCase):
         warning.assert_not_called()
         form._security_questions_form.assert_called_once_with(account_data=("Persona Prueba", "V-20000001", USER_PASSWORD, ROLES[0]))
 
-    @patch("hemeroteca.ui.login_view.messagebox.showwarning")
+    @patch("ui.login_view.messagebox.showwarning")
     def test_58_public_form_can_only_route_to_regular_user_registration(self, warning):
         'Verifica la validación y conservación de datos del caso test_58_public_form_can_only_route_to_regular_user_registration.'
         form = self.registration_form()
@@ -575,7 +573,7 @@ class FormValidationTests(unittest.TestCase):
         warning.assert_not_called()
         form._security_questions_form.assert_called_once_with(account_data=("Persona Prueba", "V-20000001", USER_PASSWORD, ROLES[2]))
 
-    @patch("hemeroteca.ui.login_view.messagebox.showerror")
+    @patch("ui.login_view.messagebox.showerror")
     def test_59_failed_login_clears_password_and_does_not_open_session(self, error):
         'Verifica la validación y conservación de datos del caso test_59_failed_login_clears_password_and_does_not_open_session.'
         form = self.registration_form()
@@ -588,7 +586,7 @@ class FormValidationTests(unittest.TestCase):
         form.login_password.focus_set.assert_called_once()
         form.show_shell.assert_not_called()
 
-    @patch("hemeroteca.ui.login_view.messagebox.showerror")
+    @patch("ui.login_view.messagebox.showerror")
     def test_60_successful_login_stores_session_version_and_opens_consultation(self, error):
         'Verifica la validación y conservación de datos del caso test_60_successful_login_stores_session_version_and_opens_consultation.'
         form = self.registration_form()

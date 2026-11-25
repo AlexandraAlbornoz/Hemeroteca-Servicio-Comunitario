@@ -6,12 +6,12 @@ import threading
 import unittest
 from pathlib import Path
 
-from hemeroteca.main import create_services
-from hemeroteca.config.settings import TITLES, REGIONAL, SECURITY_QUESTIONS, ROLES
-from hemeroteca.database.maintenance import database_guard
-from hemeroteca.database.schema import SCHEMA_VERSION
-from hemeroteca.services.access_service import AccessDenied
-from hemeroteca.services.backup_archive import validated_database
+from main import create_services
+from config.settings import TITLES, REGIONAL, SECURITY_QUESTIONS, ROLES
+from database.maintenance import database_guard
+from database.schema import SCHEMA_VERSION
+from services.access_service import AccessDenied
+from services.backup_archive import validated_database
 
 
 class PruebasMejoras(unittest.TestCase):
@@ -60,7 +60,7 @@ class PruebasMejoras(unittest.TestCase):
             self.servicios.periodicos.save_record(self.maestro, self.valores(str(numero)))
         primera = self.servicios.periodicos.search_issues(self.maestro, catalog=True)
         segunda = self.servicios.periodicos.search_issues(self.maestro, catalog=True, page=2)
-        self.assertEqual((primera['total'], len(primera['items']), primera['pages']), (19, 5, 4))
+        self.assertEqual((primera['total'], len(primera['items']), primera['pages']), (19, 8, 3))
         self.assertTrue({fila['id'] for fila in primera['items']}.isdisjoint(fila['id'] for fila in segunda['items']))
 
     def test_ultimos_cinco_conserva_total_y_orden(self):
@@ -117,9 +117,7 @@ class PruebasMejoras(unittest.TestCase):
         self.assertEqual(resultado['items'][0]['name'], 'María Pérez')
 
     def test_solicitudes_paginadas_no_filtran_datos_ajenos(self):
-        """El resumen y la lista se limitan al administrador regular titular."""
-        self.servicios.connection.execute('UPDATE users SET role=?,managed_permissions=1 WHERE id=?', (ROLES[1], self.usuario['id']))
-        self.servicios.connection.commit()
+        """El resumen y la lista se limitan al titular de la sesión regular."""
         self.servicios.requests.submit_request(self.usuario, 'Registrar ejemplares', 'Necesito registrar')
         self.assertEqual(self.servicios.requests.resumen_solicitudes(self.usuario)['contadores']['Pendiente'], 1)
         pagina = self.servicios.requests.buscar_solicitudes(self.usuario, texto='MARÍA')
@@ -162,7 +160,7 @@ class PruebasMejoras(unittest.TestCase):
 
     def test_importacion_no_modifica_origen_ni_sobrescribe_destino(self):
         """La migración opcional copia datos y rechaza reemplazar una instalación nueva."""
-        from scripts.importar_datos import importar
+        from importar_datos import importar
         with tempfile.TemporaryDirectory(prefix='perri-importacion-') as directorio:
             origen = Path(directorio) / 'anterior.db'
             destino = Path(directorio) / 'maximo.db'

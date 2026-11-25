@@ -1,0 +1,17 @@
+Hemeroteca 2.2.9 — Fluidez y catálogo por pestañas
+
+Un paso completo de rueda desplaza la página 90 píxeles lógicos en lugar de
+20. Se conserva la acumulación de movimientos pequeños y la continuidad
+entre tablas, campos y contenedores. No se abren selectores por scroll.
+
+Al mostrar un control se conecta únicamente ese control, sin recorrer de
+nuevo todos sus descendientes. La medición aislada con 122 controles redujo
+las consultas a hijos durante Map de 586 a 0; no es una medición de velocidad
+de la base de datos ni garantiza una aceleración equivalente de toda la app.
+
+Catálogo tiene dos pestañas: Ejemplares y Fechas sin publicación. Se muestran
+solo las acciones, filtros y resultados de la tarea activa, con una única
+barra fija de paginación. Cambiar de pestaña conserva sus filtros y páginas
+durante la visita. La sección no activa no consulta ni dibuja sus resultados.
+
+No cambia el esquema ni los datos existentes.

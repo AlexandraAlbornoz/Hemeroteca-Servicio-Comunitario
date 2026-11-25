@@ -1,0 +1,12 @@
+Hemeroteca 2.2.7 — Registro y edición de ejemplares
+
+La fecha de publicación se selecciona en un único calendario. Se retiraron
+los selectores redundantes de año, mes y día del formulario de ejemplares.
+Al editar se conserva la fecha existente. Continúan vigentes el mínimo de
+1970 y el límite de 2021 para prensa regional.
+
+La ubicación es obligatoria: Estante, Gaveta o ambos deben contener números.
+Un aviso visible explica esta condición y Guardar permanece deshabilitado
+si los dos campos están vacíos. La validación del servicio se conserva.
+
+No cambia el esquema ni los datos existentes.

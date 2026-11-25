@@ -5,12 +5,12 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from hemeroteca.config.settings import NATIONAL, SECURITY_QUESTIONS
-from hemeroteca.services.container import create_services
-from hemeroteca.services.audit_service import append_event
-from hemeroteca.services.paginacion import instante_evento, instante_evento_utc
-from hemeroteca.utils.dates import instante_auditoria_local, instante_auditoria_utc, ZONA_AUDITORIA_LOCAL
-from hemeroteca.network.http_server import TLSHTTPServer
+from config.settings import NATIONAL, SECURITY_QUESTIONS
+from services.container import create_services
+from services.audit_service import append_event
+from services.paginacion import instante_evento, instante_evento_utc
+from utils.dates import instante_auditoria_local, instante_auditoria_utc, ZONA_AUDITORIA_LOCAL
+from network.http_server import TLSHTTPServer
 
 
 class PruebasCorreccionesQA(unittest.TestCase):
@@ -118,7 +118,7 @@ class PruebasCorreccionesQA(unittest.TestCase):
                         with self.s.connection:
                             self.s.connection.execute('INSERT INTO audit(at,user,action,result) VALUES(?,?,?,?)',
                                 (valor, 'QA', 'Ejemplar eliminado: #1', 'Completado'))
-                        with patch('hemeroteca.services.periodico_service.utc_now', return_value=ahora.isoformat()):
+                        with patch('services.periodico_service.utc_now', return_value=ahora.isoformat()):
                             self.assertEqual(self.s.periodicos.buscar_eliminados(self.actor, periodo=periodo)['total'], int(diferencia <= 0))
 
     def test_baja_hace_23_horas_incluida_y_25_excluida(self):
@@ -129,7 +129,7 @@ class PruebasCorreccionesQA(unittest.TestCase):
             valor = (ahora - timedelta(hours=horas)).astimezone(ZONA_AUDITORIA_LOCAL).strftime('%d/%m/%Y %H:%M:%S')
             with self.s.connection:
                 self.s.connection.execute('INSERT INTO audit(at,user,action,result) VALUES(?,?,?,?)', (valor, 'QA', 'Ejemplar eliminado: #1', 'Completado'))
-            with patch('hemeroteca.services.periodico_service.utc_now', return_value=ahora.isoformat()):
+            with patch('services.periodico_service.utc_now', return_value=ahora.isoformat()):
                 self.assertEqual(self.s.periodicos.buscar_eliminados(self.actor, periodo='24h')['total'], esperado)
 
     def test_auditoria_filtra_fecha_local_al_cruzar_medianoche(self):
@@ -155,7 +155,7 @@ class PruebasCorreccionesQA(unittest.TestCase):
         """Una desconexión esperada se registra en debug y libera el diagnóstico detallado."""
         servidor = TLSHTTPServer.__new__(TLSHTTPServer)
         with patch('http.server.ThreadingHTTPServer.handle_error') as original:
-            with self.assertLogs('hemeroteca.network.http_server', level='DEBUG'):
+            with self.assertLogs('network.http_server', level='DEBUG'):
                 try:
                     raise ConnectionResetError('Desconexión ficticia de QA')
                 except ConnectionResetError:
@@ -179,8 +179,8 @@ class PruebasAlineacionCalendario(unittest.TestCase):
     def test_selectores_conservan_alineacion_superior(self):
         """Los tres campos quedan alineados y conservan el calendario y los filtros parciales."""
         import customtkinter as ctk
-        from hemeroteca.ui.components import UIComponents
-        from hemeroteca.config.settings import MONTHS
+        from ui.components import UIComponents
+        from config.settings import MONTHS
         class VentanaPrueba(UIComponents, ctk.CTk):
             """Contiene únicamente los filtros para medir su distribución real en Tkinter."""
         ventana = VentanaPrueba()

@@ -1,0 +1,1 @@
+Al cambiar de pantalla durante una operación, Hemeroteca espera sin mostrar una alerta y abre el último destino elegido. Conserva las comprobaciones de permisos, evita navegar con otra sesión y permite terminar los guardados. No modifica cuentas ni datos.

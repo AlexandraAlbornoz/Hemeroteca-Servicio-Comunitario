@@ -1,7 +1,7 @@
 """Regresiones de interacción exterior y geometría real de los desplegables."""
 import unittest
 import customtkinter as ctk
-from hemeroteca.ui.controles import SelectorCompacto, EntradaEditable
+from ui.controles import SelectorCompacto, EntradaEditable
 
 
 class PruebasSelectores(unittest.TestCase):

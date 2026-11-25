@@ -1,0 +1,7 @@
+Hemeroteca 2.2.10 — Barra de Respaldos
+
+La barra fija del listado de respaldos conserva únicamente el indicador de
+página y los botones Anterior y Siguiente. Se retiran de esa barra los accesos
+Ir a filtros y Ver resultados. Las demás pantallas conservan su navegación.
+
+No cambia el almacenamiento, la creación ni la restauración de respaldos.

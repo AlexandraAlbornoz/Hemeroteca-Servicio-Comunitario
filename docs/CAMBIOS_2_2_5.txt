@@ -1,0 +1,11 @@
+Hemeroteca 2.2.5 — Selectores
+
+Las listas se cierran al hacer clic o usar la rueda fuera de ellas. El primer
+clic sigue activando el campo de destino. La rueda dentro de la lista conserva
+el desplazamiento de sus opciones. Se mantienen Escape, selección por teclado,
+flecha de apertura y captura de los formularios modales.
+
+La lista usa el ancho y el borde izquierdo del campo, también con escalado.
+Si no hay espacio vertical debajo, se abre arriba para mantenerla accesible.
+
+No cambia el esquema ni los datos de la base de datos.

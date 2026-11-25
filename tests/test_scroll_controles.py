@@ -3,8 +3,8 @@ import tkinter as tk
 from tkinter import ttk
 import unittest
 import customtkinter as ctk
-from hemeroteca.ui.components import UIComponents
-from hemeroteca.ui.controles import SelectorCompacto
+from ui.components import UIComponents
+from ui.controles import SelectorCompacto
 
 
 class VentanaScroll(UIComponents, ctk.CTk):

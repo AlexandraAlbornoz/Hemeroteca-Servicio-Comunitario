@@ -3,8 +3,8 @@ import unittest
 import tempfile
 from pathlib import Path
 import customtkinter as ctk
-from hemeroteca.ui.components import UIComponents
-from hemeroteca.ui.controles import EntradaDocumento
+from ui.components import UIComponents
+from ui.controles import EntradaDocumento
 
 
 class FormularioPrueba(UIComponents, ctk.CTk):
@@ -148,8 +148,8 @@ class PruebasEdicionCampos(unittest.TestCase):
 
     def test_consulta_periodica_no_roba_foco_a_contrasena(self):
         """La comprobación de red en segundo plano no debe sacar el cursor del campo."""
-        from hemeroteca.services.container import create_services
-        from hemeroteca.ui.tareas import ServiciosDeInterfaz
+        from services.container import create_services
+        from ui.tareas import ServiciosDeInterfaz
 
         class RedDePrueba:
             """Describe una red artificial estable sin abrir puertos."""

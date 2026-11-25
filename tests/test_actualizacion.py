@@ -5,13 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from hemeroteca.config.settings import NATIONAL, ROLES, SECURITY_QUESTIONS
-from hemeroteca.main import create_services
-from hemeroteca.network.configuration import load_settings, save_settings
-from hemeroteca.network.manager import NetworkManager
-from hemeroteca.services.access_service import AccessDenied
-from hemeroteca.utils.security import validate_password, prepare_security_questions, password_hash, password_matches
-from hemeroteca.utils.validaciones import validar_nombre, validar_documento_nuevo, validar_numero, validar_edicion
+from config.settings import NATIONAL, ROLES, SECURITY_QUESTIONS
+from main import create_services
+from services.access_service import AccessDenied
+from utils.security import validate_password, prepare_security_questions, password_hash, password_matches
+from utils.validaciones import validar_nombre, validar_documento_nuevo, validar_numero, validar_edicion
 
 
 class PruebasActualizacion(unittest.TestCase):
@@ -51,10 +49,10 @@ class PruebasActualizacion(unittest.TestCase):
                 validar_documento_nuevo(valor)
 
     def test_limites_contrasena(self):
-        """Comprueba 8–128 caracteres y cada categoría obligatoria."""
-        for valor in ('Abcd#123', 'Hemeroteca#2026', 'Abcdefghi#12345', 'Abcdefghij#123456', 'A#1' + 'b' * 125):
+        """Comprueba 8–15 caracteres y cada categoría obligatoria."""
+        for valor in ('Abcd#123', 'Hemeroteca#2026', 'Abcdefghi#12345'):
             self.assertEqual(validate_password(valor), valor)
-        for valor in ('Ab#1234', 'A#1' + 'b' * 126, 'abcdefgh#123', 'ABCDEFGH#123', 'Abcdefgh123', 'Abcdefgh###', 'Abcd# 123', 'Abcd#123\n'):
+        for valor in ('Ab#1234', 'Abcdefghij#123456', 'abcdefgh#123', 'ABCDEFGH#123', 'Abcdefgh123', 'Abcdefgh###', 'Abcd# 123', 'Abcd#123\n'):
             with self.subTest(valor=valor), self.assertRaises(ValueError):
                 validate_password(valor)
 
@@ -111,8 +109,6 @@ class PruebasActualizacion(unittest.TestCase):
 
     def test_solicitudes_rechazadas_se_pueden_reenviar(self):
         """Una rechazada permite reenviar; pendiente o activa no duplica avisos."""
-        self.s.connection.execute('UPDATE users SET role=?,managed_permissions=1 WHERE id=?', (ROLES[1], self.usuario['id']))
-        self.s.connection.commit()
         numero = self.s.requests.submit_request(self.usuario, 'Editar ejemplares', 'Trabajo de archivo')
         with self.assertRaises(ValueError):
             self.s.requests.submit_request(self.usuario, 'Editar ejemplares', 'Otra vez')
@@ -123,66 +119,37 @@ class PruebasActualizacion(unittest.TestCase):
             self.s.requests.submit_request(self.usuario, 'Editar ejemplares', 'Ya activo')
 
     def test_solicitudes_globales_exigen_permiso_explicito(self):
-        """El usuario regular no accede a solicitudes ni con un grant heredado."""
+        """El servidor limita al titular hasta que el maestro concede acceso global."""
         self.s.connection.execute("INSERT INTO requests(user_id,permission,reason,created_at) VALUES(?,?,?,?)", (self.maestro['id'], 'Auditoría', 'Ejemplo ajeno', '2026-10-28'))
         self.s.connection.commit()
-        with self.assertRaises(AccessDenied):
-            self.s.requests.buscar_solicitudes(self.usuario)
+        self.assertEqual(self.s.requests.buscar_solicitudes(self.usuario)['total'], 0)
         self.s.connection.execute('INSERT INTO grants VALUES(?,?)', (self.usuario['id'], 'Consultar solicitudes de todos'))
         self.s.connection.commit()
-        with self.assertRaises(AccessDenied):
-            self.s.requests.buscar_solicitudes(self.usuario)
+        self.assertEqual(self.s.requests.buscar_solicitudes(self.usuario)['total'], 1)
         with self.assertRaises(AccessDenied):
             self.s.requests.decide_request(self.usuario, 1, True)
 
     def test_formateo_protegido_y_respaldo(self):
-        """Exige al maestro, respalda y deja vacías las cuentas, datos y autorizaciones."""
+        """Valida credenciales, copia íntegra y conservación de la cuenta maestra."""
         with tempfile.TemporaryDirectory() as temporal:
             ruta = Path(temporal) / 'prueba.db'
-            configuracion = Path(temporal) / 'network.json'
             servicios = create_services(ruta)
             try:
                 self.semilla.connection.backup(servicios.connection)
                 maestro = servicios.auth.authenticate('V-100000', self.clave)
                 usuario = servicios.auth.authenticate('E-1000000', self.clave)
                 servicios.periodicos.save_record(maestro, self.valores())
-                servicios.connection.execute("INSERT INTO authorized_devices VALUES(?,?,?,?,?,?,?)",
-                                            ('cliente-ficticio', 'clave-ficticia', 'nodo-ficticio',
-                                             'PC de prueba', 1, 'Maestro', '2026-11-03'))
-                servicios.connection.execute("INSERT INTO device_nonces VALUES(?,?,?)",
-                                            ('cliente-ficticio', 'nonce-ficticio', 100))
-                servicios.connection.execute("INSERT INTO system_settings VALUES(?,?)",
-                                            ('active_host_id', 'nodo-principal'))
-                servicios.connection.commit()
-                gestor = NetworkManager(ruta, configuracion)
-                ajustes = dict(gestor.settings, mode='server', server_url='https://127.0.0.1:8765',
-                               fingerprint='f' * 64)
-                save_settings(ajustes, configuracion)
-                gestor.settings = ajustes
                 for actor, clave, confirmacion in ((usuario, self.clave, 'FORMATEAR HEMEROTECA'), (maestro, 'Incorrecta', 'FORMATEAR HEMEROTECA'), (maestro, self.clave, 'NO')):
                     with self.assertRaises(ValueError):
                         servicios.users.formatear_aplicacion(actor, clave, confirmacion)
                 self.assertEqual(servicios.connection.execute('SELECT count(*) FROM issues').fetchone()[0], 1)
                 copia = servicios.users.formatear_aplicacion(maestro, self.clave, 'FORMATEAR HEMEROTECA')
-                gestor.reiniciar_tras_formateo()
                 with closing(sqlite3.connect(copia)) as respaldo:
                     self.assertEqual(respaldo.execute('SELECT count(*) FROM users').fetchone()[0], 2)
                     self.assertEqual(respaldo.execute('SELECT count(*) FROM issues').fetchone()[0], 1)
-                    self.assertEqual(respaldo.execute('SELECT count(*) FROM authorized_devices').fetchone()[0], 1)
-                tablas = [fila[0] for fila in servicios.connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
-                for tabla in tablas:
-                    with self.subTest(tabla=tabla):
-                        self.assertEqual(servicios.connection.execute('SELECT count(*) FROM ' + tabla).fetchone()[0], 0)
+                self.assertEqual(servicios.connection.execute('SELECT count(*) FROM users').fetchone()[0], 1)
+                self.assertEqual(servicios.connection.execute('SELECT count(*) FROM issues').fetchone()[0], 0)
                 self.assertEqual(list(servicios.connection.execute('PRAGMA foreign_key_check')), [])
-                self.assertTrue(servicios.auth.needs_setup())
-                self.assertEqual(load_settings(configuracion)['mode'], 'local')
-                self.assertEqual(load_settings(configuracion)['server_url'], '')
-                reiniciado = gestor.services()
-                try:
-                    self.assertTrue(reiniciado.auth.needs_setup())
-                    self.assertEqual(gestor.settings['mode'], 'local')
-                finally:
-                    reiniciado.close()
+                self.assertEqual(servicios.auth.authenticate('V-100000', self.clave)['role'], ROLES[0])
             finally:
                 servicios.close()

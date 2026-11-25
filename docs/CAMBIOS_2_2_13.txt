@@ -1,0 +1,22 @@
+Hemeroteca 2.2.13 — Guardado de ejemplares
+
+Se corrige un bloqueo silencioso del botón Guardar en alta y edición de ejemplares.
+Antes, una edición de un carácter o una fecha regional posterior a 2021 podían
+deshabilitar el botón sin explicar qué dato necesitaba corrección.
+
+Ahora el motivo se muestra en rojo junto al botón, siempre visible aunque el
+formulario se desplace. La habilitación y el guardado comparten la misma función
+de validación, incluyendo periódico, fecha, edición, número, ubicación y estado.
+Se mantienen las reglas de negocio y los controles de autorización del servidor.
+
+Se evitan redibujos de validación cuando los campos no han cambiado. Los errores
+devueltos al guardar, como un duplicado, no desaparecen por el temporizador.
+El cierre del diálogo cancela su validación periódica antes de liberar controles.
+
+La revisión encontró este mecanismo en registrar y editar ejemplares, que usan
+el mismo formulario. Los demás formularios revisados muestran los errores al
+enviar y no utilizan este validador periódico para bloquear el guardado.
+
+Se añaden pruebas para mensajes visibles, corrección y habilitación del botón,
+persistencia del aviso de duplicado, ubicación alternativa y cierre del diálogo.
+Los datos reales y las credenciales no se modifican durante las pruebas.

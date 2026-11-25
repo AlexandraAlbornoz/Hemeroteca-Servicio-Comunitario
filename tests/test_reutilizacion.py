@@ -4,10 +4,10 @@ from tkinter import ttk
 import unittest
 from unittest.mock import patch
 
-from hemeroteca.config.settings import NATIONAL, PERMISSIONS, SECURITY_QUESTIONS, ROLES
-from hemeroteca.services.container import create_services
-from hemeroteca.services.access_service import AccessDenied
-from hemeroteca.ui.components import UIComponents
+from config.settings import NATIONAL, PERMISSIONS, SECURITY_QUESTIONS
+from services.container import create_services
+from services.access_service import AccessDenied
+from ui.components import UIComponents
 
 
 class PruebasServiciosCompartidos(unittest.TestCase):
@@ -71,9 +71,6 @@ class PruebasServiciosCompartidos(unittest.TestCase):
 
     def test_permisos_disponibles_conservan_alcance_y_actualizacion(self):
         """Pendientes ajenos no afectan al usuario común; concesiones y revocaciones se leen de nuevo."""
-        self.servicios.connection.execute('UPDATE users SET role=?,managed_permissions=1 WHERE id IN (?,?)',
-                                         (ROLES[1], self.id_usuario, self.id_otro))
-        self.servicios.connection.commit()
         solicitudes = self.servicios.requests
         solicitudes.submit_request(self.usuario,'Auditoría','Necesito consultar el historial')
         solicitudes.submit_request(self.otro,'Usuarios','Necesito consultar las cuentas')
@@ -81,8 +78,8 @@ class PruebasServiciosCompartidos(unittest.TestCase):
         self.assertIn('Usuarios',solicitudes.available_permissions(self.usuario))
         with self.servicios.connection:
             self.servicios.connection.execute('INSERT INTO grants(user_id,permission) VALUES(?,?)',(self.id_usuario,'Consultar solicitudes de todos'))
-        # El permiso global de lectura no mezcla pendientes de otra cuenta.
-        self.assertIn('Usuarios',solicitudes.available_permissions(self.usuario))
+        # Conserva el alcance global anterior cuando se concede explícitamente.
+        self.assertNotIn('Usuarios',solicitudes.available_permissions(self.usuario))
         with self.servicios.connection:
             self.servicios.connection.execute('DELETE FROM grants WHERE user_id=?',(self.id_usuario,))
             self.servicios.connection.execute("UPDATE requests SET status='Declinada' WHERE user_id=?",(self.id_usuario,))
@@ -121,7 +118,6 @@ class PruebasEstilosCompartidos(unittest.TestCase):
             self.assertEqual(estilo.theme_use(),'clam')
             self.assertEqual(int(estilo.lookup('Hemeroteca.Treeview','rowheight')),42)
         finally:
-            raiz.update_idletasks()
             raiz.destroy()
 
     def test_limpieza_conserva_contenedor_y_notifica_destruccion(self):
@@ -138,5 +134,4 @@ class PruebasEstilosCompartidos(unittest.TestCase):
             self.assertEqual(marco.winfo_children(),[])
             self.assertEqual(avisos,[hijo])
         finally:
-            raiz.update_idletasks()
             raiz.destroy()

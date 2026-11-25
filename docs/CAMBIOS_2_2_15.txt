@@ -1,0 +1,1 @@
+Hemeroteca 2.2.15: Todos los periódicos admiten fechas entre el 01/01/1970 y el 31/12/2100. Se elimina el límite regional de 2021 en alta, edición y fechas sin publicación. Calendarios, mensajes y validación del servicio usan el mismo rango. Los datos existentes se conservan.

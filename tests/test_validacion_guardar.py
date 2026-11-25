@@ -1,7 +1,7 @@
 """Regresiones de preparación de formularios y mensajes de bloqueo de Guardar."""
 import unittest
-from hemeroteca.config.settings import NATIONAL, REGIONAL
-from hemeroteca.ui.validacion_formularios import preparar_ejemplar
+from config.settings import NATIONAL, REGIONAL
+from ui.validacion_formularios import preparar_ejemplar
 
 
 class PruebasValidacionGuardar(unittest.TestCase):

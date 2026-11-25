@@ -2,11 +2,11 @@
 import time
 import unittest
 
-from hemeroteca.config.settings import ROLES, SECURITY_QUESTIONS
-from hemeroteca.main import create_services
-from hemeroteca.services.access_service import AccessDenied
-from hemeroteca.services.recovery_service import RegistrationResult
-from hemeroteca.ui.tareas import materializar
+from config.settings import ROLES, SECURITY_QUESTIONS
+from main import create_services
+from services.access_service import AccessDenied
+from services.recovery_service import RegistrationResult
+from ui.tareas import materializar
 
 
 class PruebasRecuperacionSeguridad(unittest.TestCase):
@@ -16,7 +16,7 @@ class PruebasRecuperacionSeguridad(unittest.TestCase):
     def setUpClass(cls):
         """Crea cuentas y códigos artificiales para una semilla independiente."""
         cls.semilla = create_services(':memory:')
-        cls.contrasena = 'Inicial!2026'  # pragma: allowlist secret (credencial sintética de la prueba)
+        cls.contrasena = 'Inicial!2026'
         cls.respuestas = ('Luna', 'María', 'Pecas')
         cls.preguntas = tuple(zip(SECURITY_QUESTIONS[:3], cls.respuestas))
         cls.registros = [cls.semilla.auth.create_master('Maestro temporal', 'V-700001', cls.contrasena, cls.preguntas)]

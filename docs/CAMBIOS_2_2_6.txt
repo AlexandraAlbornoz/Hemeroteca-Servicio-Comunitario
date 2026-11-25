@@ -1,0 +1,11 @@
+Hemeroteca 2.2.6 — Desplazamiento sobre selectores
+
+La rueda sobre un selector cerrado continúa desplazando el formulario sin
+abrir las opciones ni modificar el valor del campo. Se aplica al texto,
+la flecha y los campos deshabilitados.
+
+Las opciones se abren mediante clic o teclado. Dentro de la lista abierta,
+la rueda conserva su desplazamiento independiente. Al usar la rueda sobre
+el campo, fuera de la lista, el menú se cierra y se desplaza el formulario.
+
+No cambia el esquema ni el contenido de las bases de datos.

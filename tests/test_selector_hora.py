@@ -1,8 +1,8 @@
 """Regresiones de escritura y selección horaria sin acceder a datos personales."""
 import unittest
 import customtkinter as ctk
-from hemeroteca.ui.controles import EntradaEditable
-from hemeroteca.ui.selector_hora import SelectorHora, usuario_auditoria_valido
+from ui.controles import EntradaEditable
+from ui.selector_hora import SelectorHora, usuario_auditoria_valido
 
 
 class PruebasFiltrosAuditoria(unittest.TestCase):
